@@ -1,0 +1,459 @@
+name: Publish
+
+on:
+    push:
+        branches: [main]
+
+jobs:
+    # ─── Job 1 : Build des images avec version anticipée ────────────────────
+    # On calcule la prochaine version (PATCH+1) SANS encore commiter le bump.
+    # L'image est buildée avec cette version future dans son LABEL.
+    # Le commit réel n'a lieu qu'en job 3, après validation des tests.
+    build-images:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - service: auth-service
+                      port: 3001
+                    - service: project-service
+                      port: 3002
+                    - service: task-service
+                      port: 3003
+                    - service: notification-service
+                      port: 3004
+                    - service: api-gateway
+                      port: 3005
+                      dockerfile: services/api-gateway/Dockerfile
+                    - service: frontend
+                      port: 80
+                      dockerfile: frontend/Dockerfile
+                      context: frontend
+                      service_dir: frontend
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 2
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            - name: Setup QEMU
+              uses: docker/setup-qemu-action@v3
+
+            - name: Setup Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            - name: Login GitHub Container Registry
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Calculer la prochaine version et lire le manifeste
+              id: compat
+              run: |
+                  SERVICE=${{ matrix.service }}
+                  SERVICE_DIR="${{ matrix.service_dir || '' }}"
+                  if [ -z "$SERVICE_DIR" ]; then SERVICE_DIR="services/$SERVICE"; fi
+                  COMPAT="$SERVICE_DIR/compatibility.json"
+
+                  CURRENT=$(node -p "require('./$SERVICE_DIR/package.json').version" 2>/dev/null || echo "1.0.0")
+
+                  # Vérifier si ce service a des changements réels (hors fichiers de config)
+                  CHANGED=$(git diff --name-only HEAD~1 HEAD -- "$SERVICE_DIR/" \
+                    | grep -v "package.json" | grep -v "compatibility.json" || true)
+
+                  if [ -n "$CHANGED" ]; then
+                    # Calculer PATCH+1 sans modifier package.json
+                    IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+                    NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
+                  else
+                    NEXT="$CURRENT"
+                  fi
+
+                  echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+                  echo "major=$(echo "$NEXT" | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+                  echo "minor=$(echo "$NEXT" | cut -d. -f1-2)" >> "$GITHUB_OUTPUT"
+
+                  if [ -f "./$COMPAT" ]; then
+                    echo "provides_api=$(node -p "require('./$COMPAT').provides?.['api-version'] || 'v1'")" \
+                      >> "$GITHUB_OUTPUT"
+                    echo "req_auth=$(node -p "require('./$COMPAT').requires?.['auth-service'] || ''")" \
+                      >> "$GITHUB_OUTPUT"
+                    echo "req_project=$(node -p "require('./$COMPAT').requires?.['project-service'] || ''")" \
+                      >> "$GITHUB_OUTPUT"
+                    echo "req_task=$(node -p "require('./$COMPAT').requires?.['task-service'] || ''")" \
+                      >> "$GITHUB_OUTPUT"
+                    echo "req_notification=$(node -p "require('./$COMPAT').requires?.['notification-service'] || ''")" \
+                      >> "$GITHUB_OUTPUT"
+                  else
+                    echo "provides_api=v1" >> "$GITHUB_OUTPUT"
+                    echo "req_auth=" >> "$GITHUB_OUTPUT"
+                    echo "req_project=" >> "$GITHUB_OUTPUT"
+                    echo "req_task=" >> "$GITHUB_OUTPUT"
+                    echo "req_notification=" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Build et push ${{ matrix.service }} (:sha et :vX.Y.Z)
+              uses: docker/build-push-action@v6
+              with:
+                  context: ${{ matrix.context || '.' }}
+                  file: ${{ matrix.dockerfile || 'services/Dockerfile' }}
+                  build-args: |
+                      SERVICE=${{ matrix.service }}
+                      PORT=${{ matrix.port }}
+                      VERSION=${{ steps.compat.outputs.version }}
+                      PROVIDES_API_VERSION=${{ steps.compat.outputs.provides_api }}
+                      REQUIRES_AUTH_SERVICE=${{ steps.compat.outputs.req_auth }}
+                      REQUIRES_PROJECT_SERVICE=${{ steps.compat.outputs.req_project }}
+                      REQUIRES_TASK_SERVICE=${{ steps.compat.outputs.req_task }}
+                      REQUIRES_NOTIFICATION_SERVICE=${{ steps.compat.outputs.req_notification }}
+                  platforms: linux/amd64,linux/arm64
+                  push: true
+                  # :latest absent volontairement — ajouté en job 3 seulement si tests OK
+                  tags: |
+                      ghcr.io/${{ github.repository_owner }}/projet_initial_archi/${{ matrix.service }}:${{ github.sha }}
+                      ghcr.io/${{ github.repository_owner }}/projet_initial_archi/${{ matrix.service }}:${{ steps.compat.outputs.version }}
+                      ghcr.io/${{ github.repository_owner }}/projet_initial_archi/${{ matrix.service }}:${{ steps.compat.outputs.major }}
+                      ghcr.io/${{ github.repository_owner }}/projet_initial_archi/${{ matrix.service }}:${{ steps.compat.outputs.minor }}
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
+
+    # ─── Job 2 : Tests d'intégration sur la combinaison complète ────────────
+    # Tous les services démarrent avec les images sha fraîchement buildées.
+    # Si un seul service est incompatible → job rouge → pas de bump, pas de :latest.
+    integration-tests:
+        needs: build-images
+        runs-on: ubuntu-latest
+        permissions:
+            packages: read
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: 'npm'
+
+            - run: npm ci
+
+            - name: Login GHCR pour puller les images
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Démarrer la stack complète avec les images du sha courant
+              env:
+                  IMAGE_TAG: ${{ github.sha }}
+                  REGISTRY_OWNER: ${{ github.repository_owner }}
+                  JWT_SECRET: ci-integration-secret
+              run: docker compose -f docker-compose.ci.yml up -d
+
+            - name: Attendre que tous les services soient joignables
+              run: |
+                  for i in $(seq 1 40); do
+                    ALL_OK=true
+                    for PORT in 3001 3002 3003; do
+                      if ! curl -sf "http://localhost:$PORT/" > /dev/null 2>&1; then
+                        ALL_OK=false
+                      fi
+                    done
+                    if [ "$ALL_OK" = "true" ]; then
+                      echo "Services prêts"
+                      break
+                    fi
+                    sleep 3
+                  done
+
+            - name: Vérifier la compatibilité entre services
+              run: npx ts-node scripts/check-compatibility.ts
+
+            - name: Lancer les tests d'intégration
+              run: npm run test:integration
+
+            - name: Logs des services en cas d'échec
+              if: failure()
+              env:
+                  IMAGE_TAG: ${{ github.sha }}
+                  REGISTRY_OWNER: ${{ github.repository_owner }}
+              run: docker compose -f docker-compose.ci.yml logs
+
+            - name: Arrêter la stack
+              if: always()
+              env:
+                  IMAGE_TAG: ${{ github.sha }}
+                  REGISTRY_OWNER: ${{ github.repository_owner }}
+              run: docker compose -f docker-compose.ci.yml down -v
+
+    # ─── Job 3 : Bump versions + push :latest (seulement si tests OK) ───────
+    # Ce job ne s'exécute QUE si les tests d'intégration ont réussi.
+    # C'est ici que la version est réellement commitée dans package.json,
+    # et que :latest est publié sur le registre.
+    finalize:
+        needs: [build-images, integration-tests]
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            packages: write
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 2
+                  token: ${{ secrets.GH_PAT }}
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            - name: Setup Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            - name: Login GitHub Container Registry
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Configurer Git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            - name: Bumper les versions des services modifiés
+              id: bump
+              run: |
+                  SERVICES=("auth-service" "project-service" "task-service" "notification-service" "api-gateway")
+                  HAS_CHANGES=false
+
+                  for service in "${SERVICES[@]}"; do
+                    CHANGED=$(git diff --name-only HEAD~1 HEAD -- "services/$service/" \
+                      | grep -v "package.json" | grep -v "compatibility.json" || true)
+
+                    if [ -n "$CHANGED" ]; then
+                      echo "→ Bump $service"
+                      npm version patch --no-git-tag-version \
+                        --workspace "services/$service"
+                      HAS_CHANGES=true
+                    fi
+                  done
+
+                  echo "has_changes=$HAS_CHANGES" >> "$GITHUB_OUTPUT"
+
+            - name: Commiter le bump de version
+              if: steps.bump.outputs.has_changes == 'true'
+              run: |
+                  git add services/*/package.json
+                  git commit -m "chore: bump service versions [skip ci]"
+                  git push
+
+            - name: Promouvoir les images :sha vers :latest
+              # Les images sha sont validées par les tests → on peut les publier.
+              # imagetools create recrée le tag sans re-télécharger l'image.
+              run: |
+                  REGISTRY="ghcr.io/${{ github.repository_owner }}/projet_initial_archi"
+                  for service in auth-service project-service task-service notification-service api-gateway frontend; do
+                    docker buildx imagetools create \
+                      --tag "$REGISTRY/$service:latest" \
+                      "$REGISTRY/$service:${{ github.sha }}"
+                    echo "$service → :latest publié"
+                  done
+
+    # ─── Job 4 : Déploiement sur le serveur d'intégration Azure ────────────
+    deploy-integration:
+        needs: finalize
+        runs-on: ubuntu-latest
+        permissions: {}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Envoyer docker-compose.deploy.yml sur le serveur d'intégration
+              uses: appleboy/scp-action@v0.1.7
+              with:
+                  host: ${{ secrets.VM_HOST_INT }}
+                  username: ${{ secrets.VM_USER_INT }}
+                  key: ${{ secrets.SSH_PRIVATE_KEY_INT }}
+                  source: docker-compose.deploy.yml
+                  target: ~/app/
+
+            - name: Déployer sur le serveur d'intégration
+              uses: appleboy/ssh-action@v1.2.0
+              with:
+                  host: ${{ secrets.VM_HOST_INT }}
+                  username: ${{ secrets.VM_USER_INT }}
+                  key: ${{ secrets.SSH_PRIVATE_KEY_INT }}
+                  script: |
+                      set -e
+                      cd ~/app
+
+                      REGISTRY="ghcr.io/${{ github.repository_owner }}/projet_initial_archi"
+                      SERVICES=("auth-service" "project-service" "task-service" "notification-service" "api-gateway" "frontend")
+
+                      echo "=== [INT] 1. Sauvegarde des images actuelles ==="
+                      declare -A PREV_IMAGES
+                      for service in "${SERVICES[@]}"; do
+                        PREV=$(docker inspect --format='{{.Image}}' "$service" 2>/dev/null || echo "")
+                        PREV_IMAGES[$service]="$PREV"
+                        echo "$service → ${PREV:-aucune image précédente}"
+                      done
+
+                      echo "=== [INT] 2. Migrations de base de données ==="
+                      REGISTRY_OWNER="${{ github.repository_owner }}"
+                      export REGISTRY_OWNER
+
+                      docker compose -f docker-compose.deploy.yml run --rm project-migrations
+                      docker compose -f docker-compose.deploy.yml run --rm task-migrations
+
+                      echo "=== [INT] 2b. Démarrer Redis si absent ==="
+                      docker compose -f docker-compose.deploy.yml up -d redis
+
+                      echo "=== [INT] 3. Redémarrage progressif des services ==="
+                      ROLLBACK_NEEDED=false
+
+                      for service in "${SERVICES[@]}"; do
+                        echo "--- $service ---"
+                        docker pull "$REGISTRY/$service:latest"
+                        docker compose -f docker-compose.deploy.yml up -d --no-deps --pull never "$service"
+
+                        HEALTHY=false
+                        for i in $(seq 1 20); do
+                          CID=$(docker compose -f docker-compose.deploy.yml ps -q "$service" 2>/dev/null | head -1)
+                          if [ -z "$CID" ]; then sleep 3; continue; fi
+                          RUNNING=$(docker inspect --format='{{.State.Running}}' "$CID" 2>/dev/null || echo "false")
+                          HEALTH=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CID" 2>/dev/null || echo "none")
+                          if [ "$RUNNING" = "true" ] && { [ "$HEALTH" = "healthy" ] || [ "$HEALTH" = "none" ]; }; then
+                            HEALTHY=true; break
+                          fi
+                          sleep 3
+                        done
+
+                        if [ "$HEALTHY" = "false" ]; then
+                          echo "ÉCHEC : $service → rollback"
+                          ROLLBACK_NEEDED=true
+                          PREV="${PREV_IMAGES[$service]}"
+                          if [ -n "$PREV" ]; then
+                            docker tag "$PREV" "$REGISTRY/$service:rollback"
+                            docker compose -f docker-compose.deploy.yml up -d --no-deps "$service"
+                          fi
+                          break
+                        fi
+                        echo "$service OK"
+                      done
+
+                      if [ "$ROLLBACK_NEEDED" = "true" ]; then
+                        echo "=== ROLLBACK INT effectué ===" && exit 1
+                      fi
+                      echo "=== Déploiement INT terminé ==="
+
+    # ─── Job 5 : Manual Gate — validation humaine sur l'environnement INT ──
+    # Ce job ne fait rien sur le serveur. Il sert uniquement de point d'arrêt.
+    # GitHub met le pipeline en pause ici et envoie une notification aux reviewers.
+    # Un reviewer se connecte sur le serveur d'intégration, vérifie que tout fonctionne,
+    # puis clique "Approve" sur GitHub pour autoriser le déploiement en production.
+    #
+    # Configurer dans Settings → Environments → integration → Required reviewers.
+    validate-integration:
+        needs: deploy-integration
+        runs-on: ubuntu-latest
+        environment: integration
+        permissions: {}
+        steps:
+            - name: Intégration validée — déploiement en production autorisé
+              run: echo "Version validée sur l'environnement d'intégration."
+
+    # ─── Job 6 : Déploiement sur le serveur de production Azure ─────────────
+    # Se lance automatiquement après approbation du Manual Gate (job 5).
+    deploy-prod:
+        needs: validate-integration
+        runs-on: ubuntu-latest
+        environment: production
+        permissions: {}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Envoyer docker-compose.deploy.yml sur le serveur de production
+              uses: appleboy/scp-action@v0.1.7
+              with:
+                  host: ${{ secrets.VM_HOST_PROD }}
+                  username: ${{ secrets.VM_USER_PROD }}
+                  key: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
+                  source: docker-compose.deploy.yml
+                  target: ~/app/
+
+            - name: Déployer sur le serveur de production
+              uses: appleboy/ssh-action@v1.2.0
+              with:
+                  host: ${{ secrets.VM_HOST_PROD }}
+                  username: ${{ secrets.VM_USER_PROD }}
+                  key: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
+                  script: |
+                      set -e
+                      cd ~/app
+
+                      REGISTRY="ghcr.io/${{ github.repository_owner }}/projet_initial_archi"
+                      SERVICES=("auth-service" "project-service" "task-service" "notification-service" "api-gateway" "frontend")
+
+                      echo "=== [PROD] 1. Sauvegarde des images actuelles ==="
+                      declare -A PREV_IMAGES
+                      for service in "${SERVICES[@]}"; do
+                        PREV=$(docker inspect --format='{{.Image}}' "$service" 2>/dev/null || echo "")
+                        PREV_IMAGES[$service]="$PREV"
+                        echo "$service → ${PREV:-aucune image précédente}"
+                      done
+
+                      echo "=== [PROD] 2. Migrations de base de données ==="
+                      REGISTRY_OWNER="${{ github.repository_owner }}"
+                      export REGISTRY_OWNER
+
+                      docker compose -f docker-compose.deploy.yml run --rm project-migrations
+                      docker compose -f docker-compose.deploy.yml run --rm task-migrations
+
+                      echo "=== [PROD] 2b. Démarrer Redis si absent ==="
+                      docker compose -f docker-compose.deploy.yml up -d redis
+
+                      echo "=== [PROD] 3. Redémarrage progressif des services ==="
+                      ROLLBACK_NEEDED=false
+
+                      for service in "${SERVICES[@]}"; do
+                        echo "--- $service ---"
+                        docker pull "$REGISTRY/$service:latest"
+                        docker compose -f docker-compose.deploy.yml up -d --no-deps --pull never "$service"
+
+                        HEALTHY=false
+                        for i in $(seq 1 20); do
+                          CID=$(docker compose -f docker-compose.deploy.yml ps -q "$service" 2>/dev/null | head -1)
+                          if [ -z "$CID" ]; then sleep 3; continue; fi
+                          RUNNING=$(docker inspect --format='{{.State.Running}}' "$CID" 2>/dev/null || echo "false")
+                          HEALTH=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CID" 2>/dev/null || echo "none")
+                          if [ "$RUNNING" = "true" ] && { [ "$HEALTH" = "healthy" ] || [ "$HEALTH" = "none" ]; }; then
+                            HEALTHY=true; break
+                          fi
+                          sleep 3
+                        done
+
+                        if [ "$HEALTHY" = "false" ]; then
+                          echo "ÉCHEC : $service → rollback"
+                          ROLLBACK_NEEDED=true
+                          PREV="${PREV_IMAGES[$service]}"
+                          if [ -n "$PREV" ]; then
+                            docker tag "$PREV" "$REGISTRY/$service:rollback"
+                            docker compose -f docker-compose.deploy.yml up -d --no-deps "$service"
+                          fi
+                          break
+                        fi
+                        echo "$service OK"
+                      done
+
+                      if [ "$ROLLBACK_NEEDED" = "true" ]; then
+                        echo "=== ROLLBACK PROD effectué ===" && exit 1
+                      fi
+                      echo "=== Déploiement PROD terminé ==="

@@ -1,0 +1,211 @@
+services:
+    api-gateway:
+        build:
+            context: .
+            dockerfile: services/api-gateway/Dockerfile
+        ports:
+            - '3005:3005'
+        volumes:
+            - ./services/api-gateway/src:/app/src
+        environment:
+            - NODE_ENV=${NODE_ENV:-development}
+            - API_VERSION=${API_VERSION:-v1}
+            - AUTH_SERVICE_URL=http://auth-service:3001
+            - PROJECT_SERVICE_URL=http://project-service:3002
+            - TASK_SERVICE_URL=http://task-service:3003
+        depends_on:
+            - auth-service
+            - project-service
+            - task-service
+
+    auth-service:
+        build:
+            context: .
+            dockerfile: services/Dockerfile
+            args:
+                SERVICE: auth-service
+                PORT: 3001
+        ports:
+            - '3001:3001'
+        volumes:
+            - ./services/auth-service/src:/app/src
+            - auth-data:/app/data
+        environment:
+            - JWT_SECRET=${JWT_SECRET}
+            - SQLITE_DB_LOCATION=/app/data/auth.db
+
+    project-service:
+        build:
+            context: .
+            dockerfile: services/Dockerfile
+            args:
+                SERVICE: project-service
+                PORT: 3002
+        ports:
+            - '3002:3002'
+        volumes:
+            - ./services/project-service/src:/app/src
+            - project-data:/app/data
+        environment:
+            - NODE_ENV=${NODE_ENV:-development}
+            - JWT_SECRET=${JWT_SECRET}
+            - DB_TYPE=${DB_TYPE:-sqlite}
+            - SQLITE_DB_LOCATION=/app/data/projects.db
+            - TASK_SERVICE_URL=http://task-service:3003
+            - REDIS_HOST=redis
+            - MYSQL_HOST=mysql-projects
+            - MYSQL_USER=${MYSQL_USER}
+            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+            - MYSQL_DB=projects
+        depends_on:
+            - redis
+
+    project-migrations:
+        build:
+            context: .
+            dockerfile: services/Dockerfile
+            args:
+                SERVICE: project-service
+                PORT: 3002
+        command: ['node', 'dist/migrations/cli.js', 'up']
+        profiles:
+            - production
+        volumes:
+            - project-data:/app/data
+        environment:
+            - NODE_ENV=production
+            - DB_TYPE=${DB_TYPE:-sqlite}
+            - SQLITE_DB_LOCATION=/app/data/projects.db
+            - MYSQL_HOST=mysql-projects
+            - MYSQL_USER=${MYSQL_USER}
+            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+            - MYSQL_DB=projects
+
+    task-service:
+        build:
+            context: .
+            dockerfile: services/Dockerfile
+            args:
+                SERVICE: task-service
+                PORT: 3003
+        ports:
+            - '3003:3003'
+        volumes:
+            - ./services/task-service/src:/app/src
+            - task-data:/app/data
+        environment:
+            - NODE_ENV=${NODE_ENV:-development}
+            - JWT_SECRET=${JWT_SECRET}
+            - DB_TYPE=${DB_TYPE:-sqlite}
+            - SQLITE_DB_LOCATION=/app/data/tasks.db
+            - REDIS_HOST=redis
+            - MYSQL_HOST=mysql-tasks
+            - MYSQL_USER=${MYSQL_USER}
+            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+            - MYSQL_DB=tasks
+        depends_on:
+            - redis
+
+    task-migrations:
+        build:
+            context: .
+            dockerfile: services/Dockerfile
+            args:
+                SERVICE: task-service
+                PORT: 3003
+        command: ['node', 'dist/migrations/cli.js', 'up']
+        profiles:
+            - production
+        volumes:
+            - task-data:/app/data
+        environment:
+            - NODE_ENV=production
+            - DB_TYPE=${DB_TYPE:-sqlite}
+            - SQLITE_DB_LOCATION=/app/data/tasks.db
+            - MYSQL_HOST=mysql-tasks
+            - MYSQL_USER=${MYSQL_USER}
+            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+            - MYSQL_DB=tasks
+
+    notification-service:
+        build:
+            context: .
+            dockerfile: services/Dockerfile
+            args:
+                SERVICE: notification-service
+                PORT: 3004
+        ports:
+            - '3004:3004'
+        volumes:
+            - ./services/notification-service/src:/app/src
+            - notification-logs:/app/logs
+        environment:
+            - REDIS_HOST=redis
+            - LOG_FILE=/app/logs/notifications.log
+            - SMTP_HOST=${SMTP_HOST}
+            - SMTP_PORT=${SMTP_PORT}
+            - SMTP_SECURE=${SMTP_SECURE}
+            - SMTP_USER=${SMTP_USER}
+            - SMTP_PASS=${SMTP_PASS}
+            - SMTP_FROM=${SMTP_FROM}
+            - SMTP_RECIPIENT=${SMTP_RECIPIENT}
+            - AUTH_SERVICE_URL=http://auth-service:3001
+            - PROJECT_SERVICE_URL=http://project-service:3002
+        depends_on:
+            - redis
+
+    frontend:
+        build: ./frontend
+        expose:
+            - '80'
+        depends_on:
+            - auth-service
+            - project-service
+            - task-service
+
+    reverse-proxy:
+        build: ./reverse-proxy
+        ports:
+            - '3000:80'
+        depends_on:
+            - frontend
+            - auth-service
+            - project-service
+            - task-service
+
+    mysql-tasks:
+        image: mysql:8
+        environment:
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+            MYSQL_DATABASE: tasks
+        ports:
+            - '3308:3306'
+        volumes:
+            - mysql-tasks-data:/var/lib/mysql
+        profiles:
+            - mysql
+
+    mysql-projects:
+        image: mysql:8
+        environment:
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+            MYSQL_DATABASE: projects
+        ports:
+            - '3309:3306'
+        volumes:
+            - mysql-projects-data:/var/lib/mysql
+        profiles:
+            - mysql
+
+    redis:
+        image: redis:7-alpine
+        ports:
+            - '6379:6379'
+
+volumes:
+    auth-data:
+    project-data:
+    task-data:
+    notification-logs:
+    mysql-tasks-data:
+    mysql-projects-data:

@@ -1,0 +1,100 @@
+# Utilisé par ci-publish.yml pour les tests d'intégration post-merge.
+# Contrairement au docker-compose.yml de dev, ce fichier :
+#   - utilise des images pré-construites depuis GHCR (pas de build local)
+#   - supprime les montages de source (pas de hot-reload en CI)
+#   - ajoute des healthchecks pour que depends_on attende réellement le démarrage
+#
+# Variables requises :
+#   IMAGE_TAG      : SHA du commit (ex: a1b2c3d)
+#   REGISTRY_OWNER : propriétaire GHCR (ex: theo-saly)
+#   JWT_SECRET     : secret JWT partagé entre les services
+
+services:
+    auth-service:
+        image: ghcr.io/${REGISTRY_OWNER}/projet_initial_archi/auth-service:${IMAGE_TAG}
+        ports:
+            - '3001:3001'
+        environment:
+            - JWT_SECRET=${JWT_SECRET:-ci-integration-secret}
+            - SQLITE_DB_LOCATION=/app/data/auth.db
+        volumes:
+            - auth-ci:/app/data
+        healthcheck:
+            # nc -z vérifie l'ouverture du port TCP sans dépendre du code HTTP retourné
+            test: ['CMD-SHELL', 'nc -z localhost 3001 || exit 1']
+            interval: 5s
+            timeout: 3s
+            retries: 15
+            start_period: 15s
+
+    project-service:
+        image: ghcr.io/${REGISTRY_OWNER}/projet_initial_archi/project-service:${IMAGE_TAG}
+        ports:
+            - '3002:3002'
+        environment:
+            - JWT_SECRET=${JWT_SECRET:-ci-integration-secret}
+            - DB_TYPE=sqlite
+            - SQLITE_DB_LOCATION=/app/data/projects.db
+            - TASK_SERVICE_URL=http://task-service:3003
+            - REDIS_HOST=redis
+        volumes:
+            - project-ci:/app/data
+        depends_on:
+            # condition: service_healthy attend que le healthcheck passe avant de démarrer
+            auth-service:
+                condition: service_healthy
+            redis:
+                condition: service_started
+        healthcheck:
+            test: ['CMD-SHELL', 'nc -z localhost 3002 || exit 1']
+            interval: 5s
+            timeout: 3s
+            retries: 15
+            start_period: 15s
+
+    task-service:
+        image: ghcr.io/${REGISTRY_OWNER}/projet_initial_archi/task-service:${IMAGE_TAG}
+        ports:
+            - '3003:3003'
+        environment:
+            - JWT_SECRET=${JWT_SECRET:-ci-integration-secret}
+            - DB_TYPE=sqlite
+            - SQLITE_DB_LOCATION=/app/data/tasks.db
+            - REDIS_HOST=redis
+        volumes:
+            - task-ci:/app/data
+        depends_on:
+            auth-service:
+                condition: service_healthy
+            redis:
+                condition: service_started
+        healthcheck:
+            test: ['CMD-SHELL', 'nc -z localhost 3003 || exit 1']
+            interval: 5s
+            timeout: 3s
+            retries: 15
+            start_period: 15s
+
+    notification-service:
+        image: ghcr.io/${REGISTRY_OWNER}/projet_initial_archi/notification-service:${IMAGE_TAG}
+        ports:
+            - '3004:3004'
+        environment:
+            - REDIS_HOST=redis
+            - LOG_FILE=/app/logs/notifications.log
+            - AUTH_SERVICE_URL=http://auth-service:3001
+            - PROJECT_SERVICE_URL=http://project-service:3002
+        volumes:
+            - notification-ci:/app/logs
+        depends_on:
+            redis:
+                condition: service_started
+
+    redis:
+        image: redis:7-alpine
+
+volumes:
+    auth-ci:
+    project-ci:
+    task-ci:
+    notification-ci:

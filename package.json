@@ -1,0 +1,65 @@
+{
+  "name": "101-app",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "license": "MIT",
+  "scripts": {
+    "prettify": "prettier -l --write \"**/*.{js,ts}\"",
+    "test": "jest",
+    "test:integration": "npx jest --testPathPatterns='services/(project-service|task-service)'",
+    "migrate:up": "npm run migrate:up --workspace services/project-service && npm run migrate:up --workspace services/task-service",
+    "migrate:down": "npm run migrate:down --workspace services/task-service && npm run migrate:down --workspace services/project-service",
+    "dev": "nodemon -L --exec ts-node src/index.ts",
+    "lint": "eslint frontend/js services/api-gateway/src services/auth-service/src services/project-service/src services/task-service/src services/notification-service/src"
+  },
+  "dependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "bcryptjs": "^3.0.3",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.17.4",
+    "sqlite3": "^5.1.7",
+    "uuid": "^13.0.0",
+    "wait-port": "^1.1.0"
+  },
+  "overrides": {
+    "ansi-regex": "5.0.1"
+  },
+  "prettier": {
+    "trailingComma": "all",
+    "tabWidth": 4,
+    "useTabs": false,
+    "semi": true,
+    "singleQuote": true
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.60.0",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.9.2",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "@typescript-eslint/parser": "^8.61.0",
+    "eslint": "^10.0.1",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.6.0",
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.14",
+    "playwright": "^1.60.0",
+    "prettier": "^3.8.1",
+    "ts-jest": "^29.4.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.0",
+    "jest-junit": "^17.0.0"
+  },
+  "workspaces": [
+    "services/api-gateway",
+    "services/auth-service",
+    "services/project-service",
+    "services/task-service",
+    "services/notification-service"
+  ]
+}

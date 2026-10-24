@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "ES2020",
+        "module": "commonjs",
+        "lib": ["ES2020"],
+        "outDir": "./dist",
+        "rootDir": ".",
+        "strict": false,
+        "allowJs": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "moduleDetection": "force"
+    },
+    "include": ["services/**/*", "spec/**/*"],
+    "exclude": ["node_modules", "dist", "tests-e2e", "coverage", "frontend"],
+}

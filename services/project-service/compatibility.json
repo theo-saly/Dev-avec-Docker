@@ -1,0 +1,8 @@
+{
+    "provides": {
+        "api-version": "v1"
+    },
+    "requires": {
+        "auth-service": ">=1.0.0 <2.0.0"
+    }
+}
