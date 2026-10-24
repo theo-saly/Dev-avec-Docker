@@ -1,5 +1,5 @@
 {
-    "name": "project-service",
+    "name": "event-service",
     "version": "1.0.0",
     "main": "src/index.ts",
     "license": "MIT",
@@ -7,6 +7,7 @@
         "dev": "nodemon -L --exec ts-node src/index.ts",
         "build": "tsc",
         "start": "node dist/index.js",
+        "lint": "eslint src",
         "migrate:up": "ts-node src/migrations/cli.ts up",
         "migrate:down": "ts-node src/migrations/cli.ts down",
         "migrate:up:prod": "node dist/migrations/cli.js up",
@@ -15,7 +16,6 @@
     },
     "dependencies": {
         "express": "^5.2.1",
-        "sqlite3": "^5.1.7",
         "uuid": "^13.0.0",
         "jsonwebtoken": "^9.0.3",
         "ioredis": "^5.6.1",

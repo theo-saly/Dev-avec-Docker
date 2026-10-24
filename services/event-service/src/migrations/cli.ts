@@ -4,7 +4,7 @@ const direction = process.argv[2] === 'down' ? 'down' : 'up';
 
 migrate(direction)
     .then(() => {
-        console.log(`Project migrations ${direction} completed`);
+        console.log(`Event migrations ${direction} completed`);
     })
     .catch((error) => {
         console.error(error);
