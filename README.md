@@ -1,3 +1,5 @@
+[![CI](https://github.com/theo-saly/Dev-avec-Docker/actions/workflows/ci.yml/badge.svg)](https://github.com/theo-saly/Dev-avec-Docker/actions/workflows/ci.yml)
+
 # Kanban Project Manager — Architecture Microservices
 
 Application de gestion de projet Kanban construite en **microservices** avec **Node.js**, **TypeScript**, **Express 5**, **Redis Streams** et **Docker Compose**.
