@@ -1,6 +1,6 @@
 import Redis from 'ioredis';
 
-const STREAM_NAME = 'task-events';
+const STREAM_NAME = 'ticket-events';
 
 let redis: Redis | null = null;
 
@@ -26,14 +26,16 @@ export async function publishEvent(
             '*',
             'eventType',
             eventType,
-            'taskId',
-            payload.taskId,
-            'projectId',
-            payload.projectId || '',
-            'oldStatus',
-            payload.oldStatus || '',
-            'newStatus',
-            payload.newStatus || '',
+            'ticketId',
+            payload.ticketId,
+            'eventId',
+            payload.eventId,
+            'eventTitle',
+            payload.eventTitle || '',
+            'userId',
+            payload.userId,
+            'quantity',
+            payload.quantity,
             'timestamp',
             new Date().toISOString(),
         );
