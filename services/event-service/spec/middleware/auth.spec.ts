@@ -39,7 +39,9 @@ test('requireAuth : token signé avec un autre secret → 401', () => {
 test('requireAuth : token valide → req.user rempli', () => {
     const res = makeRes();
     const next = jest.fn();
-    const req: any = { headers: { authorization: `Bearer ${sign('standard')}` } };
+    const req: any = {
+        headers: { authorization: `Bearer ${sign('standard')}` },
+    };
     requireAuth(req, res, next);
     expect(next).toHaveBeenCalledTimes(1);
     expect(req.user).toEqual({ id: 1, email: 'a@b.c', role: 'standard' });

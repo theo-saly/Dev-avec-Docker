@@ -1,17 +1,12 @@
-import express from 'express';
 import db from './persistence';
-import routes from './routes/routes';
+import app from './app';
 
-const app = express();
-
-app.use(express.json());
-
-routes(app);
+const port = Number(process.env.PORT) || 3002;
 
 db.init()
     .then(() => {
-        app.listen(3002, () =>
-            console.log('Project service listening on port 3002'),
+        app.listen(port, () =>
+            console.log(`Event service listening on port ${port}`),
         );
     })
     .catch((err) => {

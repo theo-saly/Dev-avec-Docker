@@ -1,6 +1,6 @@
 import Redis from 'ioredis';
 
-const STREAM_NAME = 'project-events';
+const STREAM_NAME = 'event-events';
 
 let redis: Redis | null = null;
 
@@ -26,12 +26,10 @@ export async function publishEvent(
             '*',
             'eventType',
             eventType,
-            'projectId',
-            payload.projectId,
-            'projectName',
-            payload.projectName || '',
-            'ownerId',
-            payload.ownerId || '',
+            'eventId',
+            payload.eventId,
+            'eventTitle',
+            payload.eventTitle || '',
             'timestamp',
             new Date().toISOString(),
         );

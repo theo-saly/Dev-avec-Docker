@@ -1,47 +1,52 @@
-import type { Project, ProjectRepository } from './ProjectRepository';
+import type { Event, EventRepository } from './EventRepository';
 
-let projects: Project[] = [];
+let events: Event[] = [];
 
 async function init(): Promise<void> {
-    projects = [];
+    events = [];
 }
 
 async function teardown(): Promise<void> {
-    projects = [];
+    events = [];
 }
 
-async function getProjects(ownerId: string): Promise<Project[]> {
-    return projects.filter((project) => project.ownerId === ownerId);
+async function getEvents(): Promise<Event[]> {
+    return events
+        .map((event) => ({ ...event }))
+        .sort(
+            (a, b) =>
+                new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+        );
 }
 
-async function getProject(id: string): Promise<Project | undefined> {
-    const project = projects.find((p) => p.id === id);
-    return project ? { ...project } : undefined;
+async function getEvent(id: string): Promise<Event | undefined> {
+    const event = events.find((e) => e.id === id);
+    return event ? { ...event } : undefined;
 }
 
-async function storeProject(project: Project): Promise<void> {
-    projects.push({ ...project });
+async function storeEvent(event: Event): Promise<void> {
+    events.push({ ...event });
 }
 
-async function updateProject(id: string, project: Project): Promise<void> {
-    const index = projects.findIndex((p) => p.id === id);
+async function updateEvent(id: string, event: Event): Promise<void> {
+    const index = events.findIndex((e) => e.id === id);
     if (index !== -1) {
-        projects[index] = { ...project, id };
+        events[index] = { ...event, id };
     }
 }
 
-async function removeProject(id: string): Promise<void> {
-    projects = projects.filter((p) => p.id !== id);
+async function removeEvent(id: string): Promise<void> {
+    events = events.filter((e) => e.id !== id);
 }
 
-const repository: ProjectRepository = {
+const repository: EventRepository = {
     init,
     teardown,
-    getProjects,
-    getProject,
-    storeProject,
-    updateProject,
-    removeProject,
+    getEvents,
+    getEvent,
+    storeEvent,
+    updateEvent,
+    removeEvent,
 };
 
 export default repository;
