@@ -4,13 +4,14 @@
   "main": "src/index.ts",
   "license": "MIT",
   "scripts": {
+    "make-token": "ts-node scripts/make-token.ts",
     "prettify": "prettier -l --write \"**/*.{js,ts}\"",
     "test": "jest",
-    "test:integration": "npx jest --testPathPatterns='services/(project-service|task-service)'",
-    "migrate:up": "npm run migrate:up --workspace services/project-service && npm run migrate:up --workspace services/task-service",
-    "migrate:down": "npm run migrate:down --workspace services/task-service && npm run migrate:down --workspace services/project-service",
+    "test:integration": "npx jest --testPathPatterns='services/(event-service|ticket-service)'",
+    "migrate:up": "npm run migrate:up --workspace services/event-service && npm run migrate:up --workspace services/ticket-service",
+    "migrate:down": "npm run migrate:down --workspace services/ticket-service && npm run migrate:down --workspace services/event-service",
     "dev": "nodemon -L --exec ts-node src/index.ts",
-    "lint": "eslint frontend/js services/api-gateway/src services/auth-service/src services/project-service/src services/task-service/src services/notification-service/src"
+    "lint": "eslint services/auth-service/src services/event-service/src services/ticket-service/src services/notification-service/src"
   },
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -19,7 +20,6 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.17.4",
-    "sqlite3": "^5.1.7",
     "uuid": "^13.0.0",
     "wait-port": "^1.1.0"
   },
@@ -57,8 +57,8 @@
   },
   "workspaces": [
     "services/auth-service",
-    "services/project-service",
-    "services/task-service",
+    "services/event-service",
+    "services/ticket-service",
     "services/notification-service"
   ]
 }
