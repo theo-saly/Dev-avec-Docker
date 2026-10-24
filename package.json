@@ -56,7 +56,6 @@
     "jest-junit": "^17.0.0"
   },
   "workspaces": [
-    "services/api-gateway",
     "services/auth-service",
     "services/project-service",
     "services/task-service",
