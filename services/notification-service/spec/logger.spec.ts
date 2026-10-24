@@ -9,63 +9,55 @@ jest.mock('fs', () => ({
 
 import { writeLog } from '../src/logger';
 
+const lastLine = () =>
+    (fs.appendFileSync as jest.Mock).mock.calls[0][1] as string;
+
 beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(console, 'log').mockImplementation(() => {});
 });
 
-test('TaskCompleted est loggé correctement', () => {
+test('ticket-booked produit le message de réservation', () => {
     writeLog({
-        eventType: 'TaskCompleted',
-        taskId: 'task-1',
-        projectId: 'proj-1',
-        oldStatus: 'en cours',
-        newStatus: 'terminé',
-        timestamp: '2026-03-19T12:00:00.000Z',
+        eventType: 'ticket-booked',
+        ticketId: 't1',
+        eventId: 'e1',
+        eventTitle: 'Concert',
+        userId: '5',
+        quantity: '2',
+        timestamp: '2026-10-29T12:00:00.000Z',
     });
 
-    const written = (fs.appendFileSync as jest.Mock).mock.calls[0][1] as string;
-    expect(written).toContain('Tâche terminée');
-    expect(written).toContain('task-1');
-    expect(written).toContain('terminé');
+    expect(lastLine()).toContain(
+        "Billet réservé : 2 places pour l'événement Concert par l'utilisateur 5",
+    );
 });
 
-test('TaskReopened notifie la réouverture', () => {
+test('ticket-cancelled notifie l annulation', () => {
     writeLog({
-        eventType: 'TaskReopened',
-        taskId: 'task-2',
-        projectId: 'proj-1',
-        oldStatus: 'terminé',
-        newStatus: 'en cours',
-        timestamp: '2026-03-19T12:00:00.000Z',
+        eventType: 'ticket-cancelled',
+        ticketId: 't1',
+        eventId: 'e1',
+        userId: '5',
+        quantity: '2',
     });
 
-    const written = (fs.appendFileSync as jest.Mock).mock.calls[0][1] as string;
-    expect(written).toContain('réouverte');
-    expect(written).toContain('task-2');
+    expect(lastLine()).toContain('Billet annulé');
 });
 
-test('ProjectCompleted notifie la fin du projet', () => {
+test('event-deleted notifie la suppression', () => {
     writeLog({
-        eventType: 'ProjectCompleted',
-        projectId: 'proj-1',
-        projectName: 'Mon projet',
-        ownerId: 'user-1',
-        timestamp: '2026-03-19T12:00:00.000Z',
+        eventType: 'event-deleted',
+        eventId: 'e1',
+        eventTitle: 'Concert',
     });
 
-    const written = (fs.appendFileSync as jest.Mock).mock.calls[0][1] as string;
-    expect(written).toContain('terminé');
-    expect(written).toContain('Mon projet');
-    expect(written).toContain('user-1');
+    expect(lastLine()).toContain('Événement supprimé');
+    expect(lastLine()).toContain('Concert');
 });
 
 test('événement inconnu est loggé en JSON', () => {
-    writeLog({
-        eventType: 'UnknownEvent',
-        data: 'test',
-        timestamp: '2026-03-19T12:00:00.000Z',
-    });
+    writeLog({ eventType: 'UnknownEvent', data: 'test' });
 
-    const written = (fs.appendFileSync as jest.Mock).mock.calls[0][1] as string;
-    expect(written).toContain('UnknownEvent');
+    expect(lastLine()).toContain('UnknownEvent');
 });

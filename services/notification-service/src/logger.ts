@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { formatMessage } from './messages';
 
 const LOG_FILE = process.env.LOG_FILE || '/app/logs/notifications.log';
 
@@ -10,29 +11,16 @@ function ensureLogDir(): void {
     }
 }
 
-function formatNotification(event: Record<string, string>): string {
-    const timestamp = event.timestamp || new Date().toISOString();
-
-    switch (event.eventType) {
-        case 'ProjectCompleted':
-            return `[${timestamp}] NOTIFICATION → Utilisateur ${event.ownerId} : Le projet "${event.projectName}" (${event.projectId}) est terminé. Félicitations !`;
-
-        case 'TaskReopened':
-            return `[${timestamp}] NOTIFICATION → Tâche réouverte : La tâche ${event.taskId} du projet ${event.projectId} a été réouverte (${event.oldStatus} → ${event.newStatus}). Attention, le projet ne peut plus être clôturé.`;
-
-        case 'TaskCompleted':
-            return `[${timestamp}] EVENT → Tâche terminée : La tâche ${event.taskId} du projet ${event.projectId} est passée à "terminé" (${event.oldStatus} → ${event.newStatus}).`;
-
-        default:
-            return `[${timestamp}] EVENT → ${event.eventType} | ${JSON.stringify(event)}`;
-    }
-}
-
 export function writeLog(event: Record<string, string>): void {
-    ensureLogDir();
+    const timestamp = event.timestamp || new Date().toISOString();
+    const line = `[${timestamp}] NOTIFICATION → ${formatMessage(event)}`;
 
-    const line = formatNotification(event) + '\n';
+    console.log(line);
 
-    fs.appendFileSync(LOG_FILE, line, 'utf-8');
-    console.log(line.trim());
+    try {
+        ensureLogDir();
+        fs.appendFileSync(LOG_FILE, line + '\n', 'utf-8');
+    } catch (err) {
+        console.error("Impossible d'écrire dans le fichier de log:", err);
+    }
 }
