@@ -3,22 +3,50 @@ export interface Message {
     text: string;
 }
 
-export interface Project {
-    id: string;
-    name: string;
-    description: string;
-    status: string;
-    echeance?: string;
-    ownerId?: string;
-    createdAt?: string;
-    updatedAt?: string;
+export type Role = 'standard' | 'admin';
+
+export interface TokenUser {
+    id: number;
+    email: string;
+    role: Role;
 }
 
-export interface Task {
+export interface User {
+    id: number;
+    email: string;
+    role: Role;
+}
+
+export interface Event {
     id: string;
     title: string;
     description: string;
-    status: string;
-    projectId: string;
-    echeance?: string;
+    venue: string;
+    startsAt: string;
+    capacity: number;
+    priceCents: number;
+}
+
+export interface Availability {
+    capacity: number;
+    booked: number;
+    remaining: number;
+}
+
+export interface Ticket {
+    id: string;
+    eventId: string;
+    userId: number;
+    quantity: number;
+    status: 'booked' | 'cancelled';
+    createdAt: string;
+}
+
+export interface PageProps {
+    token: string;
+    user: TokenUser | null;
+    params: Record<string, string>;
+    setToken: (token: string) => void;
+    navigate: (path: string) => void;
+    pushMessage: (type: string, text: string) => void;
 }

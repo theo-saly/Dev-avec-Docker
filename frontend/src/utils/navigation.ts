@@ -1,4 +1,4 @@
-export type AppHeaders = Record<string, string>;
+import type { TokenUser } from '../types';
 
 export function normalizePath(pathname: string): string {
     if (!pathname) return '/';
@@ -8,47 +8,46 @@ export function normalizePath(pathname: string): string {
     return pathname;
 }
 
-export function matchProjectPath(pathname: string): string {
-    const match = normalizePath(pathname).match(/^\/projects\/([^/]+)$/);
-    return match ? decodeURIComponent(match[1]) : '';
+// Compare un chemin à un motif (ex : /events/:id) et renvoie les paramètres,
+// ou null si le chemin ne correspond pas.
+export function matchPath(
+    pattern: string,
+    pathname: string,
+): Record<string, string> | null {
+    const patternParts = pattern.split('/');
+    const pathParts = normalizePath(pathname).split('/');
+    if (patternParts.length !== pathParts.length) return null;
+
+    const params: Record<string, string> = {};
+    for (let i = 0; i < patternParts.length; i++) {
+        if (patternParts[i].startsWith(':')) {
+            params[patternParts[i].slice(1)] = decodeURIComponent(pathParts[i]);
+        } else if (patternParts[i] !== pathParts[i]) {
+            return null;
+        }
+    }
+    return params;
 }
 
-export function buildHeaders(token: string, includeJson: boolean): AppHeaders {
-    const headers: Record<string, string> = {};
-    if (includeJson) {
-        headers['Content-Type'] = 'application/json';
-    }
-    if (token) {
-        headers.Authorization = `Bearer ${token}`;
-    }
-    return headers;
-}
-
-export function getUserIdFromToken(token: string): string | null {
+// Lit { id, email, role } dans le token. Un token illisible ou expiré
+// (claim `exp`) est considéré comme absent.
+export function decodeToken(token: string): TokenUser | null {
     if (!token) return null;
     try {
         const parts = token.split('.');
         if (parts.length !== 3) return null;
-        const decoded = JSON.parse(atob(parts[1])) as {
-            id?: string;
-            userId?: string;
-            sub?: string;
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const decoded = JSON.parse(atob(base64)) as {
+            id?: number;
+            email?: string;
+            role?: string;
+            exp?: number;
         };
-        return decoded.id || decoded.userId || decoded.sub || null;
-    } catch (err) {
-        console.error('Erreur lors de la décodification du token:', err);
+        if (decoded.exp && decoded.exp * 1000 <= Date.now()) return null;
+        if (decoded.id === undefined || !decoded.email) return null;
+        const role = decoded.role === 'admin' ? 'admin' : 'standard';
+        return { id: decoded.id, email: decoded.email, role };
+    } catch {
         return null;
     }
-}
-
-export async function parseApiResponse<T = unknown>(
-    response: Response,
-): Promise<T> {
-    const payload = (await response.json().catch(() => ({}))) as {
-        error?: string;
-    } & T;
-    if (!response.ok) {
-        throw new Error((payload as { error?: string }).error || 'Erreur API');
-    }
-    return payload as T;
 }

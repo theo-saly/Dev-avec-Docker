@@ -1,15 +1,56 @@
-import React, { useState, useEffect } from 'react';
-import {
-    normalizePath,
-    matchProjectPath,
-    buildHeaders,
-    parseApiResponse,
-} from '../utils/navigation';
+import React, { useState, useEffect, useMemo } from 'react';
+import { normalizePath, matchPath, decodeToken } from '../utils/navigation';
+import { setUnauthorizedHandler } from '../utils/api';
+import Navbar from './Navbar';
+import HomePage from '../pages/HomePage';
 import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
-import DashboardPage from '../pages/DashboardPage';
-import ProjectPage from '../pages/ProjectPage';
-import type { Message } from '../types';
+import EventsPage from '../pages/EventsPage';
+import EventDetailPage from '../pages/EventDetailPage';
+import MyTicketsPage from '../pages/MyTicketsPage';
+import AccountPage from '../pages/AccountPage';
+import AdminEventsPage from '../pages/AdminEventsPage';
+import AdminUsersPage from '../pages/AdminUsersPage';
+import NotFoundPage from '../pages/NotFoundPage';
+import ForbiddenPage from '../pages/ForbiddenPage';
+import type { Message, PageProps } from '../types';
+
+type Access = 'public' | 'auth' | 'admin';
+
+interface RouteDef {
+    path: string;
+    access: Access;
+    // Pages d'authentification : sans en-tête, avec l'écran scindé.
+    fullScreen?: boolean;
+    page: React.ComponentType<any>;
+}
+
+// Table de routes unique : un niveau d'accès par route. Le masquage côté
+// front est du confort ; la vraie protection, ce sont les 401/403 des backends.
+const ROUTES: RouteDef[] = [
+    { path: '/', access: 'public', page: HomePage },
+    { path: '/login', access: 'public', fullScreen: true, page: LoginPage },
+    {
+        path: '/register',
+        access: 'public',
+        fullScreen: true,
+        page: RegisterPage,
+    },
+    { path: '/events', access: 'auth', page: EventsPage },
+    { path: '/events/:id', access: 'auth', page: EventDetailPage },
+    { path: '/my-tickets', access: 'auth', page: MyTicketsPage },
+    { path: '/account', access: 'auth', page: AccountPage },
+    { path: '/admin/events', access: 'admin', page: AdminEventsPage },
+    { path: '/admin/users', access: 'admin', page: AdminUsersPage },
+];
+
+function findRoute(path: string) {
+    for (const route of ROUTES) {
+        const params = matchPath(route.path, path);
+        if (params) return { route, params };
+    }
+    return null;
+}
 
 export default function App() {
     const [token, setToken] = useState<string>(
@@ -19,7 +60,9 @@ export default function App() {
         normalizePath(window.location.pathname),
     );
     const [message, setMessage] = useState<Message>({ type: '', text: '' });
-    const [busy, setBusy] = useState(false);
+
+    // Un token expiré est considéré comme absent.
+    const user = useMemo(() => decodeToken(token), [token, path]);
 
     const navigate = (newPath: string) => {
         const normalized = normalizePath(newPath);
@@ -28,12 +71,14 @@ export default function App() {
         setPath(normalized);
     };
 
-    const projectIdFromPath = matchProjectPath(path);
-    const isLoginPath = path === '/login';
-    const isRegisterPath = path === '/register';
-    const isAuthPath = isLoginPath || isRegisterPath;
-    const isProjectListPath = path === '/projects';
-    const isProjectFocusPath = !!projectIdFromPath;
+    const pushMessage = (type: string, text: string) =>
+        setMessage({ type, text });
+
+    const logout = () => {
+        setToken('');
+        pushMessage('success', 'Vous avez été déconnecté.');
+        navigate('/');
+    };
 
     useEffect(() => {
         if (token) {
@@ -43,6 +88,16 @@ export default function App() {
         }
     }, [token]);
 
+    // Toute réponse 401 de l'API : suppression du token et retour au login.
+    useEffect(() => {
+        setUnauthorizedHandler(() => {
+            setToken('');
+            pushMessage('danger', 'Session expirée, veuillez vous reconnecter.');
+            window.history.pushState({}, '', '/login');
+            setPath('/login');
+        });
+    }, []);
+
     useEffect(() => {
         const onPopState = () =>
             setPath(normalizePath(window.location.pathname));
@@ -50,189 +105,53 @@ export default function App() {
         return () => window.removeEventListener('popstate', onPopState);
     }, []);
 
+    const match = findRoute(path);
+    const access = match?.route.access;
+    const mustLogin = (access === 'auth' || access === 'admin') && !user;
+    const alreadyLogged = !!user && (path === '/login' || path === '/register');
+
     useEffect(() => {
-        if (!token && (isProjectListPath || isProjectFocusPath)) {
-            navigate('/login');
-            return;
-        }
-        if (token && isAuthPath) {
-            navigate('/projects');
-            return;
-        }
-        if (path === '/') {
-            navigate(token ? '/projects' : '/login');
-            return;
-        }
-        if (
-            !isAuthPath &&
-            !isProjectListPath &&
-            !isProjectFocusPath &&
-            path !== '/'
-        ) {
-            navigate(token ? '/projects' : '/login');
-        }
+        if (token && !user) setToken('');
+        if (mustLogin) navigate('/login');
+        else if (alreadyLogged) navigate('/events');
     }, [token, path]);
 
+    const fullScreen = !!match?.route.fullScreen;
+
     useEffect(() => {
-        if (isAuthPath) {
-            document.body.classList.add('auth-no-scroll');
-        } else {
-            document.body.classList.remove('auth-no-scroll');
-        }
+        document.body.classList.toggle('auth-no-scroll', fullScreen);
         return () => document.body.classList.remove('auth-no-scroll');
-    }, [isAuthPath]);
+    }, [fullScreen]);
 
-    const pushMessage = (type: string, text: string) =>
-        setMessage({ type, text });
-    const clearMessage = () => setMessage({ type: '', text: '' });
-
-    const login = async (credentials: { email: string; password: string }) => {
-        setBusy(true);
-        clearMessage();
-        try {
-            const response = await fetch('/api/v1/auth/login', {
-                method: 'POST',
-                headers: buildHeaders('', true),
-                body: JSON.stringify(credentials),
-            });
-            const payload = await parseApiResponse<{ token: string }>(response);
-            if (!payload.token)
-                throw new Error('Token JWT manquant dans la reponse');
-            setToken(payload.token);
-            pushMessage('success', 'Connexion reussie.');
-            navigate('/projects');
-        } catch (err) {
-            pushMessage('danger', (err as Error).message);
-            throw err;
-        } finally {
-            setBusy(false);
-        }
+    const props: PageProps & { message: Message } = {
+        token,
+        user,
+        params: match?.params ?? {},
+        setToken,
+        navigate,
+        pushMessage,
+        message,
     };
 
-    const register = async (payload: {
-        email: string;
-        password: string;
-        consent: boolean;
-        birthDate: string;
-    }) => {
-        setBusy(true);
-        clearMessage();
-        try {
-            const response = await fetch('/api/v2/auth/register', {
-                method: 'POST',
-                headers: buildHeaders('', true),
-                body: JSON.stringify(payload),
-            });
-            await parseApiResponse(response);
-            pushMessage(
-                'success',
-                'Compte créé. Vous pouvez maintenant vous connecter.',
-            );
-            navigate('/login');
-        } catch (err) {
-            pushMessage('danger', (err as Error).message);
-            throw err;
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const logout = () => {
-        setToken('');
-        pushMessage('success', 'Vous avez été déconnecté.');
-        navigate('/login');
-    };
-
-    const deleteAccount = async () => {
-        setBusy(true);
-        clearMessage();
-        try {
-            const res = await fetch('/api/v1/auth/profile', {
-                method: 'DELETE',
-                headers: buildHeaders(token, false),
-            });
-            const data = await parseApiResponse<{ message?: string }>(res);
-            setToken('');
-            pushMessage(
-                'success',
-                data.message || 'Votre compte à bien été supprimé.',
-            );
-            navigate('/login');
-        } catch (err) {
-            pushMessage('danger', (err as Error).message);
-        } finally {
-            setBusy(false);
-        }
-    };
+    let content: React.ReactNode;
+    if (!match) {
+        content = <NotFoundPage {...props} />;
+    } else if (mustLogin || alreadyLogged) {
+        content = null; // redirection en cours
+    } else if (access === 'admin' && user?.role !== 'admin') {
+        content = <ForbiddenPage {...props} />;
+    } else {
+        const Page = match.route.page;
+        content = <Page key={path} {...props} />;
+    }
 
     return (
         <div className="app-shell min-vh-100">
-            {!isAuthPath && (
-                <header className="topbar container-fluid py-3 px-3 px-md-4">
-                    <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-                        <div>
-                            <div className="brand-mark">
-                                Kanban Project Manager
-                            </div>
-                            <small className="text-muted">
-                                Par Saly Théo & Inacio Rodrigues
-                            </small>
-                        </div>
-                        {token && (
-                            <div className="d-flex gap-2 flex-wrap">
-                                <button
-                                    type="button"
-                                    className="btn btn-outline-secondary"
-                                    onClick={() => navigate('/projects')}
-                                >
-                                    Projets
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn btn-outline-danger"
-                                    onClick={deleteAccount}
-                                    disabled={busy}
-                                >
-                                    Supprimer mon compte
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn btn-dark"
-                                    onClick={logout}
-                                    disabled={busy}
-                                >
-                                    Deconnexion
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </header>
+            {!fullScreen && (
+                <Navbar user={user} navigate={navigate} onLogout={logout} />
             )}
-
-            <main className={isAuthPath ? 'auth-main' : 'container pb-5'}>
-                {isLoginPath && (
-                    <LoginPage
-                        busy={busy}
-                        message={message}
-                        onLogin={login}
-                        goToRegister={() => {
-                            clearMessage();
-                            navigate('/register');
-                        }}
-                    />
-                )}
-                {isRegisterPath && (
-                    <RegisterPage
-                        busy={busy}
-                        message={message}
-                        onRegister={register}
-                        goToLogin={() => {
-                            clearMessage();
-                            navigate('/login');
-                        }}
-                    />
-                )}
-                {!isAuthPath && message.text && (
+            <main className={fullScreen ? 'auth-main' : 'container pb-5'}>
+                {!fullScreen && message.text && (
                     <div
                         className={`alert alert-${message.type === 'danger' ? 'danger' : 'success'} mb-4 mt-3`}
                         role="alert"
@@ -240,25 +159,7 @@ export default function App() {
                         {message.text}
                     </div>
                 )}
-                {token && isProjectListPath && (
-                    <DashboardPage
-                        token={token}
-                        navigate={navigate}
-                        busy={busy}
-                        setBusy={setBusy}
-                        pushMessage={pushMessage}
-                    />
-                )}
-                {token && isProjectFocusPath && (
-                    <ProjectPage
-                        token={token}
-                        projectId={projectIdFromPath}
-                        navigate={navigate}
-                        busy={busy}
-                        setBusy={setBusy}
-                        pushMessage={pushMessage}
-                    />
-                )}
+                {content}
             </main>
         </div>
     );
