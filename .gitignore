@@ -3,5 +3,6 @@ coverage
 test-results
 dist
 .DS_Store
-.env# Symfony : ce .env ne contient que des valeurs par défaut sans secret (les secrets passent par docker-compose)
+.env
+# Symfony : ce .env ne contient que des valeurs par défaut sans secret (les secrets passent par docker-compose)
 !services/auth-service/.env
