@@ -14,7 +14,7 @@
     "lint": "eslint services/event-service/src services/ticket-service/src services/notification-service/src"
   },
   "dependencies": {
-    "@types/bcryptjs": "^2.4.6",
+    "@types/bcryptjs": "^3.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "bcryptjs": "^3.0.3",
     "express": "^5.2.1",
