@@ -1,14 +1,11 @@
-# Reconstruits dans l'image : ne jamais copier les versions locales
 vendor/
 var/
-# Inutiles en production
 tests/
 .phpunit.cache/
 phpunit.dist.xml
 README.md
 Dockerfile
 .dockerignore
-# Configuration locale, dev et test : seule la config de prod va dans l'image
 .env.local
 .env.*.local
 .env.dev

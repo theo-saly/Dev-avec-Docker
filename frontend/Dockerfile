@@ -1,19 +1,11 @@
-# ---------- Stage 1 : build de l'application React (Vite) ----------
 FROM node:22-alpine AS builder
 WORKDIR /app
-
-# Dépendances d'abord pour profiter du cache ; npm ci respecte exactement le lockfile
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
-
 COPY . .
 RUN npm run build
 
-# ---------- Stage 2 : fichiers statiques servis par nginx ----------
-# Variante officielle non-root de nginx : elle écoute sur 8080 (un port < 1024 exige root).
-# L'image finale ne contient ni Node ni les sources, seulement le build.
 FROM nginxinc/nginx-unprivileged:alpine
-
 USER root
 RUN apk upgrade --no-cache
 USER nginx

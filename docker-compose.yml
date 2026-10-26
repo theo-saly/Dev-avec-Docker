@@ -1,14 +1,8 @@
-# Billetterie d'événements : lancement complet en une commande.
-#
-#   cp .env.example .env                                            # secrets, une seule fois
-#   docker compose --env-file env/test.env --env-file .env up -d --build
-#
-# env/test.env, env/uat.env, env/prod.env : réglages propres à chaque environnement (non secrets).
-# .env : secrets, jamais commité. Le dernier --env-file l'emporte.
+# cp .env.example .env
+# docker compose --env-file env/test.env --env-file .env up -d --build
 
 name: ${COMPOSE_PROJECT_NAME:-billetterie}
 
-# Réglages communs aux backends (ancres YAML : écrits une fois, réutilisés partout)
 x-backend: &backend
     restart: ${RESTART_POLICY:-unless-stopped}
     networks: [backend]
@@ -28,14 +22,12 @@ x-mysql-client: &mysql-client
     REDIS_HOST: redis
 
 services:
-    # ---------- Seul service joignable depuis l'extérieur ----------
     reverse-proxy:
         build: ./reverse-proxy
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/reverse-proxy:${TAG:-local}
         restart: ${RESTART_POLICY:-unless-stopped}
         ports:
             - '${HTTP_PORT:-8080}:8080'
-        # Seul conteneur présent sur les deux réseaux : il fait le pont entre l'extérieur et les backends.
         networks: [frontend, backend]
         depends_on:
             frontend: { condition: service_healthy }
@@ -55,7 +47,6 @@ services:
             resources:
                 limits: { cpus: '0.25', memory: 64M }
 
-    # ---------- Backends (réseau interne uniquement, aucun port publié) ----------
     auth-service:
         <<: *backend
         build: ./services/auth-service
@@ -79,7 +70,7 @@ services:
             <<: *node-build
             args: { SERVICE: event-service, PORT: 3002 }
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/event-service:${TAG:-local}
-        # En production, le service n'applique pas ses migrations seul : on les lance avant de démarrer.
+        # migrations avant le démarrage (pas automatiques en production)
         command: ['sh', '-c', 'node dist/migrations/cli.js up && exec node dist/index.js']
         environment:
             <<: *mysql-client
@@ -114,12 +105,11 @@ services:
             <<: *node-build
             args: { SERVICE: notification-service, PORT: 3004 }
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/notification-service:${TAG:-local}
-        # Seul backend autorisé à sortir sur Internet (envoi de mails SMTP).
+        # egress : accès Internet pour le SMTP
         networks: [backend, egress]
         environment:
             REDIS_HOST: redis
             LOG_FILE: /app/logs/notifications.log
-            # SMTP optionnel : sans SMTP_HOST, les notifications sont seulement journalisées.
             SMTP_HOST: ${SMTP_HOST:-}
             SMTP_PORT: ${SMTP_PORT:-465}
             SMTP_SECURE: ${SMTP_SECURE:-true}
@@ -132,8 +122,7 @@ services:
         depends_on:
             redis: { condition: service_healthy }
 
-    # ---------- Données ----------
-    # Une seule instance MySQL, une base et un utilisateur par service (créés par mysql/init).
+    # une base + un utilisateur par service (mysql/init)
     mysql:
         image: mysql:8.4
         restart: ${RESTART_POLICY:-unless-stopped}
@@ -147,7 +136,6 @@ services:
             - mysql-data:/var/lib/mysql
             - ./mysql/init:/docker-entrypoint-initdb.d:ro
         healthcheck:
-            # TCP (-h 127.0.0.1) : ne répond qu'une fois l'initialisation terminée
             test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
             interval: 5s
             timeout: 5s
@@ -173,12 +161,9 @@ services:
                 limits: { cpus: '0.25', memory: 64M }
 
 networks:
-    # Réseau exposé : reverse-proxy et frontend
     frontend:
-    # Réseau interne : aucune route vers l'extérieur ni depuis l'hôte
     backend:
         internal: true
-    # Sortie Internet réservée à notification-service
     egress:
 
 volumes:

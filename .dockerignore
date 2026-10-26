@@ -1,4 +1,3 @@
-# Contexte de build des services Node (racine du dépôt) : ne garder que le nécessaire
 .git
 .github
 **/node_modules

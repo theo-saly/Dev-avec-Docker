@@ -1,6 +1,5 @@
 #!/bin/sh
-# Exécuté par l'image MySQL au tout premier démarrage (volume vide) uniquement.
-# Une base et un utilisateur par service : chaque service n'accède qu'à ses propres données.
+# Exécuté au premier démarrage seulement (volume vide)
 set -eu
 
 mysql -uroot -p"$MYSQL_ROOT_PASSWORD" <<SQL
