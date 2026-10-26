@@ -16,7 +16,7 @@ jobs:
             matrix:
                 service: [event-service, ticket-service, notification-service]
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
             - uses: actions/setup-node@v4
               with:
                   node-version: 22
@@ -34,7 +34,7 @@ jobs:
             run:
                 working-directory: services/auth-service
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
             - uses: shivammathur/setup-php@v2
               with:
                   php-version: '8.3'
@@ -76,7 +76,7 @@ jobs:
                       file: frontend/Dockerfile
                       port: 80
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
             # Les noms d'image Docker doivent être en minuscules.
             - name: Nom de l'image
               run: echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY,,}/${{ matrix.service }}" >> "$GITHUB_ENV"
