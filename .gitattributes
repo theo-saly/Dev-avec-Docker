@@ -1,0 +1,4 @@
+# scripts lancés dans des conteneurs Linux
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.conf text eol=lf

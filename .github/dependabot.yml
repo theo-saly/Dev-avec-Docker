@@ -6,23 +6,23 @@ updates:
           interval: "weekly"
       open-pull-requests-limit: 10
 
-    - package-ecosystem: "docker"
+    - package-ecosystem: "composer"
       directory: "/services/auth-service"
       schedule:
           interval: "weekly"
 
     - package-ecosystem: "docker"
-      directory: "/services/project-service"
-      schedule: 
-          interval: "weekly"
-
-    - package-ecosystem: "docker"
-      directory: "/services/task-service"
+      directory: "/services"
       schedule:
           interval: "weekly"
 
     - package-ecosystem: "docker"
-      directory: "/services/notification-service"
+      directory: "/frontend"
+      schedule:
+          interval: "weekly"
+
+    - package-ecosystem: "docker"
+      directory: "/reverse-proxy"
       schedule:
           interval: "weekly"
 

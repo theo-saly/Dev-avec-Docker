@@ -1,5 +1,12 @@
-node_modules
-npm-debug.log
-coverage
-dist
-.DS_Store
+vendor/
+var/
+tests/
+.phpunit.cache/
+phpunit.dist.xml
+README.md
+Dockerfile
+.dockerignore
+.env.local
+.env.*.local
+.env.dev
+.env.test

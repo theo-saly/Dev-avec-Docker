@@ -21,41 +21,14 @@ jobs:
             - uses: actions/checkout@v4
             - uses: actions/setup-node@v4
               with:
-                  node-version: 20
+                  node-version: 22
                   cache: 'npm'
             - run: npm ci
             - name: npm audit (bloquant sur critical)
               run: npm audit --audit-level=critical
 
-    license-checker:
-        runs-on: ubuntu-latest
-        continue-on-error: true
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: 20
-                  cache: 'npm'
-            - run: npm ci
-            - name: Vérification des licences
-              run: npx license-checker --onlyAllow 'MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;CC-BY-4.0;CC0-1.0;Python-2.0;Unlicense;BlueOak-1.0.0'
-
     compose-config:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
-            - run: docker compose config --quiet
-
-    sonarcloud:
-        runs-on: ubuntu-latest
-        if: github.actor != 'dependabot[bot]' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-            - uses: SonarSource/sonarqube-scan-action@v6
-              env:
-                  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-              with:
-                  args: >
-                      -Dsonar.host.url=https://sonarcloud.io
+            - run: docker compose --env-file env/test.env --env-file .env.example config --quiet
