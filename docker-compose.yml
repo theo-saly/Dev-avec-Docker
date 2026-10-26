@@ -1,211 +1,186 @@
+# Billetterie d'événements : lancement complet en une commande.
+#
+#   cp .env.example .env                                            # secrets, une seule fois
+#   docker compose --env-file env/test.env --env-file .env up -d --build
+#
+# env/test.env, env/uat.env, env/prod.env : réglages propres à chaque environnement (non secrets).
+# .env : secrets, jamais commité. Le dernier --env-file l'emporte.
+
+name: ${COMPOSE_PROJECT_NAME:-billetterie}
+
+# Réglages communs aux backends (ancres YAML : écrits une fois, réutilisés partout)
+x-backend: &backend
+    restart: ${RESTART_POLICY:-unless-stopped}
+    networks: [backend]
+    deploy:
+        resources:
+            limits:
+                cpus: '${API_CPUS:-0.50}'
+                memory: ${API_MEMORY:-256M}
+
+x-node-build: &node-build
+    context: .
+    dockerfile: services/Dockerfile
+
+x-mysql-client: &mysql-client
+    MYSQL_HOST: mysql
+    JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant dans .env}
+    REDIS_HOST: redis
+
 services:
-    api-gateway:
-        build:
-            context: .
-            dockerfile: services/api-gateway/Dockerfile
+    # ---------- Seul service joignable depuis l'extérieur ----------
+    reverse-proxy:
+        build: ./reverse-proxy
+        image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/reverse-proxy:${TAG:-local}
+        restart: ${RESTART_POLICY:-unless-stopped}
         ports:
-            - '3005:3005'
-        volumes:
-            - ./services/api-gateway/src:/app/src
-        environment:
-            - NODE_ENV=${NODE_ENV:-development}
-            - API_VERSION=${API_VERSION:-v1}
-            - AUTH_SERVICE_URL=http://auth-service:3001
-            - PROJECT_SERVICE_URL=http://project-service:3002
-            - TASK_SERVICE_URL=http://task-service:3003
+            - '${HTTP_PORT:-8080}:8080'
+        # Seul conteneur présent sur les deux réseaux : il fait le pont entre l'extérieur et les backends.
+        networks: [frontend, backend]
         depends_on:
-            - auth-service
-            - project-service
-            - task-service
-
-    auth-service:
-        build:
-            context: .
-            dockerfile: services/Dockerfile
-            args:
-                SERVICE: auth-service
-                PORT: 3001
-        ports:
-            - '3001:3001'
-        volumes:
-            - ./services/auth-service/src:/app/src
-            - auth-data:/app/data
-        environment:
-            - JWT_SECRET=${JWT_SECRET}
-            - SQLITE_DB_LOCATION=/app/data/auth.db
-
-    project-service:
-        build:
-            context: .
-            dockerfile: services/Dockerfile
-            args:
-                SERVICE: project-service
-                PORT: 3002
-        ports:
-            - '3002:3002'
-        volumes:
-            - ./services/project-service/src:/app/src
-            - project-data:/app/data
-        environment:
-            - NODE_ENV=${NODE_ENV:-development}
-            - JWT_SECRET=${JWT_SECRET}
-            - DB_TYPE=${DB_TYPE:-sqlite}
-            - SQLITE_DB_LOCATION=/app/data/projects.db
-            - TASK_SERVICE_URL=http://task-service:3003
-            - REDIS_HOST=redis
-            - MYSQL_HOST=mysql-projects
-            - MYSQL_USER=${MYSQL_USER}
-            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-            - MYSQL_DB=projects
-        depends_on:
-            - redis
-
-    project-migrations:
-        build:
-            context: .
-            dockerfile: services/Dockerfile
-            args:
-                SERVICE: project-service
-                PORT: 3002
-        command: ['node', 'dist/migrations/cli.js', 'up']
-        profiles:
-            - production
-        volumes:
-            - project-data:/app/data
-        environment:
-            - NODE_ENV=production
-            - DB_TYPE=${DB_TYPE:-sqlite}
-            - SQLITE_DB_LOCATION=/app/data/projects.db
-            - MYSQL_HOST=mysql-projects
-            - MYSQL_USER=${MYSQL_USER}
-            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-            - MYSQL_DB=projects
-
-    task-service:
-        build:
-            context: .
-            dockerfile: services/Dockerfile
-            args:
-                SERVICE: task-service
-                PORT: 3003
-        ports:
-            - '3003:3003'
-        volumes:
-            - ./services/task-service/src:/app/src
-            - task-data:/app/data
-        environment:
-            - NODE_ENV=${NODE_ENV:-development}
-            - JWT_SECRET=${JWT_SECRET}
-            - DB_TYPE=${DB_TYPE:-sqlite}
-            - SQLITE_DB_LOCATION=/app/data/tasks.db
-            - REDIS_HOST=redis
-            - MYSQL_HOST=mysql-tasks
-            - MYSQL_USER=${MYSQL_USER}
-            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-            - MYSQL_DB=tasks
-        depends_on:
-            - redis
-
-    task-migrations:
-        build:
-            context: .
-            dockerfile: services/Dockerfile
-            args:
-                SERVICE: task-service
-                PORT: 3003
-        command: ['node', 'dist/migrations/cli.js', 'up']
-        profiles:
-            - production
-        volumes:
-            - task-data:/app/data
-        environment:
-            - NODE_ENV=production
-            - DB_TYPE=${DB_TYPE:-sqlite}
-            - SQLITE_DB_LOCATION=/app/data/tasks.db
-            - MYSQL_HOST=mysql-tasks
-            - MYSQL_USER=${MYSQL_USER}
-            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-            - MYSQL_DB=tasks
-
-    notification-service:
-        build:
-            context: .
-            dockerfile: services/Dockerfile
-            args:
-                SERVICE: notification-service
-                PORT: 3004
-        ports:
-            - '3004:3004'
-        volumes:
-            - ./services/notification-service/src:/app/src
-            - notification-logs:/app/logs
-        environment:
-            - REDIS_HOST=redis
-            - LOG_FILE=/app/logs/notifications.log
-            - SMTP_HOST=${SMTP_HOST}
-            - SMTP_PORT=${SMTP_PORT}
-            - SMTP_SECURE=${SMTP_SECURE}
-            - SMTP_USER=${SMTP_USER}
-            - SMTP_PASS=${SMTP_PASS}
-            - SMTP_FROM=${SMTP_FROM}
-            - SMTP_RECIPIENT=${SMTP_RECIPIENT}
-            - AUTH_SERVICE_URL=http://auth-service:3001
-            - PROJECT_SERVICE_URL=http://project-service:3002
-        depends_on:
-            - redis
+            frontend: { condition: service_healthy }
+            auth-service: { condition: service_healthy }
+            event-service: { condition: service_healthy }
+            ticket-service: { condition: service_healthy }
+        deploy:
+            resources:
+                limits: { cpus: '0.25', memory: 64M }
 
     frontend:
         build: ./frontend
-        expose:
-            - '80'
-        depends_on:
-            - auth-service
-            - project-service
-            - task-service
+        image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/frontend:${TAG:-local}
+        restart: ${RESTART_POLICY:-unless-stopped}
+        networks: [frontend]
+        deploy:
+            resources:
+                limits: { cpus: '0.25', memory: 64M }
 
-    reverse-proxy:
-        build: ./reverse-proxy
-        ports:
-            - '3000:80'
-        depends_on:
-            - frontend
-            - auth-service
-            - project-service
-            - task-service
-
-    mysql-tasks:
-        image: mysql:8
+    # ---------- Backends (réseau interne uniquement, aucun port publié) ----------
+    auth-service:
+        <<: *backend
+        build: ./services/auth-service
+        image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/auth-service:${TAG:-local}
         environment:
-            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-            MYSQL_DATABASE: tasks
-        ports:
-            - '3308:3306'
-        volumes:
-            - mysql-tasks-data:/var/lib/mysql
-        profiles:
-            - mysql
+            APP_SECRET: ${APP_SECRET:?APP_SECRET manquant dans .env}
+            DATABASE_HOST: mysql
+            DATABASE_NAME: auth
+            DATABASE_USER: auth
+            DATABASE_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD manquant dans .env}
+            JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant dans .env}
+            JWT_TTL: ${JWT_TTL:-3600}
+            ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL manquant dans .env}
+            ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD manquant dans .env}
+        depends_on:
+            mysql: { condition: service_healthy }
 
-    mysql-projects:
-        image: mysql:8
+    event-service:
+        <<: *backend
+        build:
+            <<: *node-build
+            args: { SERVICE: event-service, PORT: 3002 }
+        image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/event-service:${TAG:-local}
+        # En production, le service n'applique pas ses migrations seul : on les lance avant de démarrer.
+        command: ['sh', '-c', 'node dist/migrations/cli.js up && exec node dist/index.js']
         environment:
-            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-            MYSQL_DATABASE: projects
-        ports:
-            - '3309:3306'
+            <<: *mysql-client
+            MYSQL_USER: events
+            MYSQL_PASSWORD: ${EVENT_DB_PASSWORD:?EVENT_DB_PASSWORD manquant dans .env}
+            MYSQL_DB: events
+        depends_on:
+            mysql: { condition: service_healthy }
+            redis: { condition: service_healthy }
+
+    ticket-service:
+        <<: *backend
+        build:
+            <<: *node-build
+            args: { SERVICE: ticket-service, PORT: 3003 }
+        image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/ticket-service:${TAG:-local}
+        command: ['sh', '-c', 'node dist/migrations/cli.js up && exec node dist/index.js']
+        environment:
+            <<: *mysql-client
+            MYSQL_USER: tickets
+            MYSQL_PASSWORD: ${TICKET_DB_PASSWORD:?TICKET_DB_PASSWORD manquant dans .env}
+            MYSQL_DB: tickets
+            EVENT_SERVICE_URL: http://event-service:3002
+        depends_on:
+            mysql: { condition: service_healthy }
+            redis: { condition: service_healthy }
+            event-service: { condition: service_healthy }
+
+    notification-service:
+        <<: *backend
+        build:
+            <<: *node-build
+            args: { SERVICE: notification-service, PORT: 3004 }
+        image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/notification-service:${TAG:-local}
+        # Seul backend autorisé à sortir sur Internet (envoi de mails SMTP).
+        networks: [backend, egress]
+        environment:
+            REDIS_HOST: redis
+            LOG_FILE: /app/logs/notifications.log
+            # SMTP optionnel : sans SMTP_HOST, les notifications sont seulement journalisées.
+            SMTP_HOST: ${SMTP_HOST:-}
+            SMTP_PORT: ${SMTP_PORT:-465}
+            SMTP_SECURE: ${SMTP_SECURE:-true}
+            SMTP_USER: ${SMTP_USER:-}
+            SMTP_PASS: ${SMTP_PASS:-}
+            SMTP_FROM: ${SMTP_FROM:-}
+            SMTP_RECIPIENT: ${SMTP_RECIPIENT:-}
         volumes:
-            - mysql-projects-data:/var/lib/mysql
-        profiles:
-            - mysql
+            - notification-logs:/app/logs
+        depends_on:
+            redis: { condition: service_healthy }
+
+    # ---------- Données ----------
+    # Une seule instance MySQL, une base et un utilisateur par service (créés par mysql/init).
+    mysql:
+        image: mysql:8.4
+        restart: ${RESTART_POLICY:-unless-stopped}
+        networks: [backend]
+        environment:
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD manquant dans .env}
+            AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
+            EVENT_DB_PASSWORD: ${EVENT_DB_PASSWORD}
+            TICKET_DB_PASSWORD: ${TICKET_DB_PASSWORD}
+        volumes:
+            - mysql-data:/var/lib/mysql
+            - ./mysql/init:/docker-entrypoint-initdb.d:ro
+        healthcheck:
+            # TCP (-h 127.0.0.1) : ne répond qu'une fois l'initialisation terminée
+            test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
+            interval: 5s
+            timeout: 5s
+            retries: 20
+            start_period: 30s
+        deploy:
+            resources:
+                limits:
+                    cpus: '${DB_CPUS:-1.0}'
+                    memory: ${DB_MEMORY:-1G}
 
     redis:
         image: redis:7-alpine
-        ports:
-            - '6379:6379'
+        restart: ${RESTART_POLICY:-unless-stopped}
+        networks: [backend]
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 5s
+            timeout: 3s
+            retries: 10
+        deploy:
+            resources:
+                limits: { cpus: '0.25', memory: 64M }
+
+networks:
+    # Réseau exposé : reverse-proxy et frontend
+    frontend:
+    # Réseau interne : aucune route vers l'extérieur ni depuis l'hôte
+    backend:
+        internal: true
+    # Sortie Internet réservée à notification-service
+    egress:
 
 volumes:
-    auth-data:
-    project-data:
-    task-data:
+    mysql-data:
     notification-logs:
-    mysql-tasks-data:
-    mysql-projects-data:
