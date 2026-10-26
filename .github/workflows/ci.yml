@@ -19,7 +19,7 @@ jobs:
             - uses: actions/checkout@v4
             - uses: actions/setup-node@v4
               with:
-                  node-version: 20
+                  node-version: 22
                   cache: 'npm'
             # Monorepo en workspaces : les dépendances s'installent depuis la racine.
             - run: npm ci
@@ -52,8 +52,8 @@ jobs:
             matrix:
                 include:
                     - service: auth-service
-                      context: .
-                      file: services/Dockerfile
+                      context: services/auth-service
+                      file: services/auth-service/Dockerfile
                       port: 3001
                     - service: event-service
                       context: .
@@ -67,6 +67,10 @@ jobs:
                       context: .
                       file: services/Dockerfile
                       port: 3004
+                    - service: reverse-proxy
+                      context: reverse-proxy
+                      file: reverse-proxy/Dockerfile
+                      port: 8080
                     - service: frontend
                       context: frontend
                       file: frontend/Dockerfile
@@ -99,7 +103,8 @@ jobs:
                       PORT=${{ matrix.port }}
                   load: true
                   tags: ${{ steps.meta.outputs.tags }}
-            - uses: aquasecurity/trivy-action@0.28.0
+            # Figée sur le SHA du commit (v0.36.0) : un tag peut être déplacé, pas un SHA
+            - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
               with:
                   image-ref: ${{ env.IMAGE }}:sha-${{ github.sha }}
                   severity: CRITICAL
