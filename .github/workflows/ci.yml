@@ -1,432 +1,107 @@
 name: CI
 
 on:
-    pull_request:
-        branches: [dev, main]
+    push:
+        branches: ['**']
+        tags: ['v*']
+
+env:
+    REGISTRY: ghcr.io
 
 jobs:
-    # ─── Détecter quels services ont changé ───
-    detect-changes:
+    test-node:
         runs-on: ubuntu-latest
-        outputs:
-            auth: ${{ steps.filter.outputs.auth }}
-            project: ${{ steps.filter.outputs.project }}
-            task: ${{ steps.filter.outputs.task }}
-            notification: ${{ steps.filter.outputs.notification }}
-            frontend: ${{ steps.filter.outputs.frontend }}
-            ci: ${{ steps.filter.outputs.ci }}
+        strategy:
+            fail-fast: true
+            matrix:
+                service: [event-service, ticket-service, notification-service]
         steps:
             - uses: actions/checkout@v4
-            - uses: dorny/paths-filter@v3
-              id: filter
+            - uses: actions/setup-node@v4
               with:
-                  filters: |
-                      auth:
-                        - 'services/auth-service/**'
-                      project:
-                        - 'services/project-service/**'
-                      task:
-                        - 'services/task-service/**'
-                      notification:
-                        - 'services/notification-service/**'
-                      frontend:
-                        - 'frontend/**'
-                      ci:
-                        - '.github/workflows/**'
-                        - '.github/dependabot.yml'
+                  node-version: 20
+                  cache: 'npm'
+            # Monorepo en workspaces : les dépendances s'installent depuis la racine.
+            - run: npm ci
+            - run: npm run lint
+              working-directory: services/${{ matrix.service }}
+            - run: npm test -- --coverage
+              working-directory: services/${{ matrix.service }}
 
-    # ─── Tests unitaires (par service) ───
-    tests:
-        needs: detect-changes
+    test-php:
+        runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: services/auth-service
+        steps:
+            - uses: actions/checkout@v4
+            - uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.3'
+            - run: composer install --no-interaction --prefer-dist
+            - run: vendor/bin/phpunit
+
+    build-push:
+        needs: [test-node, test-php]
         runs-on: ubuntu-latest
         permissions:
-            checks: write
+            contents: read
+            packages: write
         strategy:
-            fail-fast: false
+            fail-fast: true
             matrix:
-                service:
-                    [
-                        auth-service,
-                        project-service,
-                        task-service,
-                        notification-service,
-                    ]
+                include:
+                    - service: auth-service
+                      context: .
+                      file: services/Dockerfile
+                      port: 3001
+                    - service: event-service
+                      context: .
+                      file: services/Dockerfile
+                      port: 3002
+                    - service: ticket-service
+                      context: .
+                      file: services/Dockerfile
+                      port: 3003
+                    - service: notification-service
+                      context: .
+                      file: services/Dockerfile
+                      port: 3004
+                    - service: frontend
+                      context: frontend
+                      file: frontend/Dockerfile
+                      port: 80
         steps:
             - uses: actions/checkout@v4
-
-            - name: Vérifier si modifié
-              id: check
-              run: |
-                  if [ "${{ matrix.service }}" = "auth-service" ]; then echo "changed=${{ needs.detect-changes.outputs.auth }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "project-service" ]; then echo "changed=${{ needs.detect-changes.outputs.project }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "task-service" ]; then echo "changed=${{ needs.detect-changes.outputs.task }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "notification-service" ]; then echo "changed=${{ needs.detect-changes.outputs.notification }}" >> $GITHUB_OUTPUT; fi
-
-            - uses: actions/setup-node@v4
-              if: steps.check.outputs.changed == 'true'
+            # Les noms d'image Docker doivent être en minuscules.
+            - name: Nom de l'image
+              run: echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY,,}/${{ matrix.service }}" >> "$GITHUB_ENV"
+            - uses: docker/setup-buildx-action@v3
+            - uses: docker/login-action@v3
               with:
-                  node-version: 20
-                  cache: 'npm'
-
-            - run: npm ci
-              if: steps.check.outputs.changed == 'true'
-
-            - name: Tests unitaires ${{ matrix.service }}
-              if: steps.check.outputs.changed == 'true'
-              env:
-                  JEST_JUNIT_OUTPUT_FILE: junit-${{ matrix.service }}.xml
-              run: npx jest --testPathPatterns="services/${{ matrix.service }}" --coverage --reporters=default --reporters=jest-junit
-
-            - name: Publier résultats tests
-              uses: dorny/test-reporter@v1
-              if: always() && steps.check.outputs.changed == 'true'
-              with:
-                  name: Tests ${{ matrix.service }}
-                  path: junit-${{ matrix.service }}.xml
-                  reporter: jest-junit
-
-            - name: Upload couverture de test
-              if: steps.check.outputs.changed == 'true'
-              uses: actions/upload-artifact@v4
-              with:
-                  name: coverage-${{ matrix.service }}
-                  path: services/${{ matrix.service }}/coverage/
-
-    # ─── Tests d'intégration (services démarrés via Docker Compose) ───────────
-    # Sur une PR, on construit les images depuis le code de la branche courante
-    # et on démarre tous les services ensemble pour tester leur compatibilité réelle.
-    # Ce job remplace les tests unitaires isolés par des appels HTTP bout-en-bout.
-    integration-tests:
-        needs: [detect-changes, tests]
-        runs-on: ubuntu-latest
-        # Ne s'exécute que si au moins un service backend a changé
-        if: |
-            needs.detect-changes.outputs.auth == 'true' ||
-            needs.detect-changes.outputs.project == 'true' ||
-            needs.detect-changes.outputs.task == 'true' ||
-            needs.detect-changes.outputs.notification == 'true'
-        steps:
-            - uses: actions/checkout@v4
-
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: 20
-                  cache: 'npm'
-
-            - run: npm ci
-
-            - name: Login GHCR pour puller les images stables
-              uses: docker/login-action@v3
-              with:
-                  registry: ghcr.io
+                  registry: ${{ env.REGISTRY }}
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
-
-            - name: Préparer les images (stable pour non-modifiés, buildée pour modifiés)
-              # Pour chaque service :
-              #   - non modifié → pull :latest depuis GHCR (image stable validée)
-              #   - modifié     → build depuis la branche et retag en :latest local
-              # Résultat : docker-compose.ci.yml avec IMAGE_TAG=latest utilise
-              # les bonnes images pour chaque service.
-              env:
-                  REGISTRY: ghcr.io/${{ github.repository_owner }}/projet_initial_archi
-              run: |
-                  declare -A CHANGED
-                  CHANGED["auth-service"]="${{ needs.detect-changes.outputs.auth }}"
-                  CHANGED["project-service"]="${{ needs.detect-changes.outputs.project }}"
-                  CHANGED["task-service"]="${{ needs.detect-changes.outputs.task }}"
-                  CHANGED["notification-service"]="${{ needs.detect-changes.outputs.notification }}"
-
-                  declare -A PORTS
-                  PORTS["auth-service"]="3001"
-                  PORTS["project-service"]="3002"
-                  PORTS["task-service"]="3003"
-                  PORTS["notification-service"]="3004"
-
-                  for service in "${!CHANGED[@]}"; do
-                    if [ "${CHANGED[$service]}" = "true" ]; then
-                      echo "→ $service modifié : build depuis la branche"
-                      docker build -f services/Dockerfile \
-                        --build-arg SERVICE="$service" \
-                        --build-arg PORT="${PORTS[$service]}" \
-                        -t "$REGISTRY/$service:latest" .
-                    else
-                      echo "→ $service non modifié : pull image stable"
-                      # || true : si aucune image stable n'existe encore, on build quand même
-                      docker pull "$REGISTRY/$service:latest" || \
-                        docker build -f services/Dockerfile \
-                          --build-arg SERVICE="$service" \
-                          --build-arg PORT="${PORTS[$service]}" \
-                          -t "$REGISTRY/$service:latest" .
-                    fi
-                  done
-
-            - name: Démarrer la stack avec les images préparées
-              env:
-                  IMAGE_TAG: latest
-                  REGISTRY_OWNER: ${{ github.repository_owner }}
-                  JWT_SECRET: ci-integration-secret
-              run: docker compose -f docker-compose.ci.yml up -d
-
-            - name: Attendre que les services répondent
-              run: |
-                  for PORT in 3001 3002 3003; do
-                    echo "Attente du port $PORT..."
-                    for i in $(seq 1 30); do
-                      if curl -sf "http://localhost:$PORT/" > /dev/null 2>&1; then
-                        echo "Port $PORT prêt"
-                        break
-                      fi
-                      sleep 3
-                    done
-                  done
-
-            - name: Lancer les tests d'intégration
-              run: npm run test:integration
-
-            - name: Afficher les logs des services en cas d'échec
-              if: failure()
-              env:
-                  IMAGE_TAG: latest
-                  REGISTRY_OWNER: ${{ github.repository_owner }}
-              run: docker compose -f docker-compose.ci.yml logs
-
-            - name: Arrêter les services
-              if: always()
-              env:
-                  IMAGE_TAG: latest
-                  REGISTRY_OWNER: ${{ github.repository_owner }}
-              run: docker compose -f docker-compose.ci.yml down -v
-
-    # ─── ESLint (par service) ───
-    lint:
-        needs: detect-changes
-        runs-on: ubuntu-latest
-        strategy:
-            fail-fast: false
-            matrix:
-                service:
-                    [
-                        auth-service,
-                        project-service,
-                        task-service,
-                        notification-service,
-                    ]
-        steps:
-            - uses: actions/checkout@v4
-
-            - name: Vérifier si modifié
-              id: check
-              run: |
-                  if [ "${{ matrix.service }}" = "auth-service" ]; then echo "changed=${{ needs.detect-changes.outputs.auth }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "project-service" ]; then echo "changed=${{ needs.detect-changes.outputs.project }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "task-service" ]; then echo "changed=${{ needs.detect-changes.outputs.task }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "notification-service" ]; then echo "changed=${{ needs.detect-changes.outputs.notification }}" >> $GITHUB_OUTPUT; fi
-
-            - uses: actions/setup-node@v4
-              if: steps.check.outputs.changed == 'true'
+            - id: meta
+              uses: docker/metadata-action@v5
               with:
-                  node-version: 20
-                  cache: 'npm'
-
-            - run: npm ci
-              if: steps.check.outputs.changed == 'true'
-
-            - name: ESLint ${{ matrix.service }}
-              if: steps.check.outputs.changed == 'true'
-              run: npx eslint services/${{ matrix.service }}/src
-
-    # ─── TypeScript check (par service) ───
-    typecheck:
-        needs: detect-changes
-        runs-on: ubuntu-latest
-        strategy:
-            fail-fast: false
-            matrix:
-                service:
-                    [
-                        auth-service,
-                        project-service,
-                        task-service,
-                        notification-service,
-                    ]
-        steps:
-            - uses: actions/checkout@v4
-
-            - name: Vérifier si modifié
-              id: check
-              run: |
-                  if [ "${{ matrix.service }}" = "auth-service" ]; then echo "changed=${{ needs.detect-changes.outputs.auth }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "project-service" ]; then echo "changed=${{ needs.detect-changes.outputs.project }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "task-service" ]; then echo "changed=${{ needs.detect-changes.outputs.task }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "notification-service" ]; then echo "changed=${{ needs.detect-changes.outputs.notification }}" >> $GITHUB_OUTPUT; fi
-
-            - uses: actions/setup-node@v4
-              if: steps.check.outputs.changed == 'true'
+                  images: ${{ env.IMAGE }}
+                  tags: |
+                      type=sha,format=long
+                      type=ref,event=tag
+            # Build local (load: true) : rien n'est poussé avant le scan Trivy.
+            - uses: docker/build-push-action@v6
               with:
-                  node-version: 20
-                  cache: 'npm'
-
-            - run: npm ci
-              if: steps.check.outputs.changed == 'true'
-
-            - name: TypeScript check ${{ matrix.service }}
-              if: steps.check.outputs.changed == 'true'
-              run: npx tsc --noEmit -p services/${{ matrix.service }}/tsconfig.json
-
-    # ─── Build Docker multi-arch (par service) ───
-    build:
-        needs: detect-changes
-        runs-on: ubuntu-latest
-        strategy:
-            fail-fast: false
-            matrix:
-                service:
-                    [
-                        auth-service,
-                        project-service,
-                        task-service,
-                        notification-service,
-                    ]
-        steps:
-            - uses: actions/checkout@v4
-
-            - name: Vérifier si modifié
-              id: check
-              run: |
-                  if [ "${{ matrix.service }}" = "auth-service" ]; then echo "changed=${{ needs.detect-changes.outputs.auth }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "project-service" ]; then echo "changed=${{ needs.detect-changes.outputs.project }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "task-service" ]; then echo "changed=${{ needs.detect-changes.outputs.task }}" >> $GITHUB_OUTPUT; fi
-                  if [ "${{ matrix.service }}" = "notification-service" ]; then echo "changed=${{ needs.detect-changes.outputs.notification }}" >> $GITHUB_OUTPUT; fi
-
-            - name: Setup QEMU
-              if: steps.check.outputs.changed == 'true'
-              uses: docker/setup-qemu-action@v3
-
-            - name: Setup Docker Buildx
-              if: steps.check.outputs.changed == 'true'
-              uses: docker/setup-buildx-action@v3
-
-            - name: Build image ${{ matrix.service }}
-              if: steps.check.outputs.changed == 'true'
-              uses: docker/build-push-action@v6
-              with:
-                  context: .
-                  file: services/Dockerfile
+                  context: ${{ matrix.context }}
+                  file: ${{ matrix.file }}
                   build-args: |
                       SERVICE=${{ matrix.service }}
-                      PORT=${{ matrix.service == 'auth-service' && '3001' || matrix.service == 'project-service' && '3002' || matrix.service == 'task-service' && '3003' || '3004' }}
-                  platforms: linux/amd64,linux/arm64
-                  push: false
-                  tags: ${{ matrix.service }}:${{ github.sha }}
-                  cache-from: type=gha
-                  cache-to: type=gha,mode=max
-
-    # ─── Trivy : scan des images Docker ───
-    trivy:
-        needs: build
-        runs-on: ubuntu-latest
-        permissions:
-            security-events: write
-        strategy:
-            fail-fast: false
-            matrix:
-                service:
-                    [
-                        auth-service,
-                        project-service,
-                        task-service,
-                        notification-service,
-                    ]
-        steps:
-            - uses: actions/checkout@v4
-            - name: Build image pour scan
-              run: |
-                  case "${{ matrix.service }}" in
-                    auth-service) PORT=3001 ;;
-                    project-service) PORT=3002 ;;
-                    task-service) PORT=3003 ;;
-                    *) PORT=3004 ;;
-                  esac
-                  docker build -t ${{ matrix.service }}:scan \
-                    -f services/Dockerfile \
-                    --build-arg SERVICE=${{ matrix.service }} \
-                    --build-arg PORT=$PORT .
-            - name: Trivy scan
-              uses: aquasecurity/trivy-action@v0.36.0
+                      PORT=${{ matrix.port }}
+                  load: true
+                  tags: ${{ steps.meta.outputs.tags }}
+            - uses: aquasecurity/trivy-action@0.28.0
               with:
-                  image-ref: ${{ matrix.service }}:scan
-                  format: 'sarif'
-                  output: 'trivy-${{ matrix.service }}.sarif'
-                  severity: 'CRITICAL,HIGH'
-            - name: Upload résultats Trivy vers GitHub Security
-              uses: github/codeql-action/upload-sarif@v4
-              if: always() && hashFiles(format('trivy-{0}.sarif', matrix.service)) != ''
-              with:
-                  sarif_file: 'trivy-${{ matrix.service }}.sarif'
-                  category: 'trivy-${{ matrix.service }}'
-
-    # ─── Checks globaux (tout le projet) ───
-    prettier:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: 20
-                  cache: 'npm'
-            - run: npm ci
-            - run: npx prettier --check "**/*.{js,ts}"
-
-    hadolint:
-        runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                service:
-                    [
-                        auth-service,
-                        project-service,
-                        task-service,
-                        notification-service,
-                    ]
-        steps:
-            - uses: actions/checkout@v4
-            - uses: hadolint/hadolint-action@v3.1.0
-              with:
-                  dockerfile: services/Dockerfile
-
-    codeql:
-        runs-on: ubuntu-latest
-        permissions:
-            security-events: write
-        steps:
-            - uses: actions/checkout@v4
-            - uses: github/codeql-action/init@v3
-              with:
-                  languages: javascript-typescript
-            - uses: github/codeql-action/analyze@v3
-
-    sonarcloud:
-        needs: tests
-        if: github.actor != 'dependabot[bot]'
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: 20
-                  cache: 'npm'
-            - run: npm ci
-            - name: Télécharger les rapports de couverture
-              uses: actions/download-artifact@v4
-              with:
-                  pattern: coverage-*
-                  merge-multiple: true
-            - uses: SonarSource/sonarqube-scan-action@v6
-              env:
-                  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-              with:
-                  args: >
-                      -Dsonar.host.url=https://sonarcloud.io
+                  image-ref: ${{ env.IMAGE }}:sha-${{ github.sha }}
+                  severity: CRITICAL
+                  exit-code: '1'
+            - run: docker push --all-tags ${{ env.IMAGE }}

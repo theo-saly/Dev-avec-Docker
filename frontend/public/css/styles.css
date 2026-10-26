@@ -223,3 +223,12 @@ body.auth-no-scroll {
         width: 100%;
     }
 }
+
+.event-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.event-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
