@@ -253,99 +253,55 @@ Le **notification-service** consomme ces streams en continu et écrit les évén
 
 ### Prérequis
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et lancé
-- [Node.js](https://nodejs.org/) ≥ 18 (pour les tests en local)
-- [pnpm](https://pnpm.io/) ou npm
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et lancé (Docker Compose v2.17 ou plus récent)
 
-### Installation
-
-1. **Cloner le dépôt**
+### Démarrage en une commande
 
 ```bash
-git clone https://github.com/theo-saly/projet_initial_archi.git
-cd projet_initial_archi
+git clone https://github.com/theo-saly/Dev-avec-Docker.git
+cd Dev-avec-Docker
+cp .env.example .env        # Windows PowerShell : Copy-Item .env.example .env
+# Remplacer chaque valeur "remplacer-..." du .env (JWT_SECRET : 32 caractères minimum)
+
+docker compose --env-file env/test.env --env-file .env up -d --build --wait
 ```
 
-2. **Créer le fichier `.env`**
+L'application est disponible sur http://localhost:8080. Le compte administrateur est celui défini par `ADMIN_EMAIL` / `ADMIN_PASSWORD` dans `.env`.
+
+Arrêt : `docker compose --env-file env/test.env --env-file .env down` (ajouter `-v` pour supprimer aussi les données MySQL).
+
+### Environnements TEST / UAT / PROD
+
+Les secrets restent dans `.env` (jamais commité). Les réglages propres à chaque environnement sont dans `env/` :
+
+| Fichier | Images | Port | Redémarrage | Limites backends | Limite MySQL |
+| --- | --- | --- | --- | --- | --- |
+| `env/test.env` | construites en local (`TAG=local`) | 8080 | non | 0,5 CPU / 256 Mo | 1 Go |
+| `env/uat.env` | publiées par la CI (`TAG=sha-<commit>`) | 8081 | `unless-stopped` | 0,5 CPU / 256 Mo | 1 Go |
+| `env/prod.env` | version figée (`TAG=v1.0.0`) | 80 | `always` | 1 CPU / 512 Mo | 2 Go |
+
+Chaque environnement a son propre nom de projet Compose : TEST, UAT et PROD peuvent tourner côte à côte sur la même machine.
+
+En UAT et PROD, les images ne sont pas reconstruites mais récupérées dans le registre GHCR :
 
 ```bash
-# Linux / macOS
-cp .env.example .env
+docker compose --env-file env/prod.env --env-file .env pull
+docker compose --env-file env/prod.env --env-file .env up -d --no-build --wait
 ```
 
-```powershell
-# Windows (PowerShell)
-Copy-Item .env.example .env
-```
+### Ce que lance le compose
 
-Renseigner ensuite les valeurs SMTP (`SMTP_USER`, `SMTP_PASS`, etc.) et le `JWT_SECRET` dans le `.env` créé.
+| Conteneur | Image | Réseaux | Exposé à l'hôte |
+| --- | --- | --- | --- |
+| reverse-proxy | nginx non-root | frontend, backend | **oui** (seul point d'entrée) |
+| frontend | nginx non-root (build React) | frontend | non |
+| auth-service | PHP 8.3 / Symfony, FrankenPHP | backend | non |
+| event-service, ticket-service | Node 22 | backend | non |
+| notification-service | Node 22 | backend, egress | non |
+| mysql | MySQL 8.4 (une base et un utilisateur par service) | backend | non |
+| redis | Redis 7 | backend | non |
 
-3. **Installer les dépendances (pour les tests et le linting en local)**
-
-```bash
-npm install
-```
-
-### Démarrage
-
-```bash
-docker compose up --build
-```
-
-### Démarrage avec MySQL
-
-Dans le fichier `.env`, définir :
-
-```env
-DB_TYPE=mysql
-```
-
-Puis lancer avec le profil `mysql` :
-
-```bash
-docker compose --profile mysql up --build
-```
-
-Les conteneurs `mysql-tasks` (port 3308) et `mysql-projects` (port 3309) démarrent uniquement avec ce profil.
-
-### Accès à l'application
-
-L'application est accessible sur **[http://localhost:3000](http://localhost:3000)**.
-
-### Arrêt
-
-```bash
-docker compose down
-```
-
-Pour supprimer aussi les données persistées (volumes) :
-
-```bash
-docker compose down -v
-```
-
----
-
-## Variables d'environnement
-
-| Variable | Service(s) | Description | Valeur par défaut |
-|----------|-----------|-------------|-------------------|
-| `DB_TYPE` | project, task | Mode de persistance : `sqlite` ou `mysql` | `sqlite` |
-| `JWT_SECRET` | auth, project, task | Clé secrète JWT | `SECRET_KEY` |
-
-| `MYSQL_ROOT_PASSWORD` | project, task | Hôte MySQL | `mysql-projects` / `mysql-tasks` |
-| `MYSQL_USER` | project, task | Utilisateur MySQL | `root` |
-| `MYSQL_PASSWORD` | project, task | Mot de passe MySQL | `root` |
-
-| `SMTP_HOST` | notification | Hôte SMTP | — |
-| `SMTP_PORT` | notification | Port SMTP | `465` |
-| `SMTP_SECURE` | notification | TLS SMTP activé | `true` |
-| `SMTP_USER` | notification | Utilisateur SMTP | — |
-| `SMTP_PASS` | notification | Mot de passe SMTP | — |
-| `SMTP_FROM` | notification | Adresse expéditeur | `SMTP_USER` |
-| `SMTP_RECIPIENT` | notification | Adresse destinataire par défaut |
-
----
+Le réseau `backend` est `internal` : ni l'hôte ni Internet ne peuvent joindre les backends ou la base. Seul notification-service a une sortie Internet (réseau `egress`), pour l'envoi de mails SMTP.
 
 ## Tests
 
