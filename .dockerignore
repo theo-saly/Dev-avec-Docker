@@ -1,2 +1,17 @@
-node_modules
+# Contexte de build des services Node (racine du dépôt) : ne garder que le nécessaire
+.git
+.github
+**/node_modules
+**/dist
+**/coverage
+**/spec
+frontend
+reverse-proxy
+mysql
+services/auth-service
+docs
+env
+.env
+.env.*
+*.md
 Dockerfile
