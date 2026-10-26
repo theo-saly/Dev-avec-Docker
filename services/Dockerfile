@@ -1,5 +1,5 @@
 # Commun à event, ticket et notification (build depuis la racine du repo)
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 ARG SERVICE
 WORKDIR /app
 
@@ -12,7 +12,7 @@ RUN npm ci --workspace services/${SERVICE} --include-workspace-root=false --no-a
 COPY services/${SERVICE}/ services/${SERVICE}/
 RUN npm run build --workspace services/${SERVICE}
 
-FROM node:22-alpine
+FROM node:26-alpine
 ARG SERVICE
 ARG PORT
 WORKDIR /app
