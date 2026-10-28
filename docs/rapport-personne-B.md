@@ -55,7 +55,7 @@ ticket-service ──Redis Stream ticket-events─┴─► notification-service
 - **Monorepo** : un seul dépôt, un pipeline, des changements transverses (contrat JWT, routes) livrés atomiquement.
 - **Pipeline** (`.github/workflows/ci.yml`, sur chaque commit et chaque tag `v*`) : tests unitaires → build de l'image (local) → scan Trivy (CRITICAL bloquant) → push GHCR. `fail-fast` : une étape en échec arrête tout ; une image vulnérable n'arrive jamais dans le registre.
 - **Tags d'image** : `sha-<commit complet>` (identifiant unique) et `vX.Y.Z` (tag Git).
-- **Outils bonus** : gitleaks et `npm audit` (`ci-security.yml`), CodeQL, Dependabot (npm, composer, docker, GitHub Actions).
+- **Outils bonus** : gitleaks et `npm audit` (`ci-security.yml`) et CodeQL.
 - **Captures des trois cas testés** (commit sur branche, tag `v0.1.0`, test cassé qui bloque `build-push`) : à ajouter après exécution sur GitHub.
 
 ## 4. Rétrospective
