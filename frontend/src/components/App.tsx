@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { normalizePath, matchPath, decodeToken } from '../utils/navigation';
 import { setUnauthorizedHandler } from '../utils/api';
 import Navbar from './Navbar';
+import Footer from './Footer';
 import HomePage from '../pages/HomePage';
 import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
@@ -150,7 +151,7 @@ export default function App() {
             {!fullScreen && (
                 <Navbar user={user} navigate={navigate} onLogout={logout} />
             )}
-            <main className={fullScreen ? 'auth-main' : 'container pb-5'}>
+            <main className={fullScreen ? 'auth-main' : 'container pt-4 pt-md-5 pb-5'}>
                 {!fullScreen && message.text && (
                     <div
                         className={`alert alert-${message.type === 'danger' ? 'danger' : 'success'} mb-4 mt-3`}
@@ -161,6 +162,7 @@ export default function App() {
                 )}
                 {content}
             </main>
+            {!fullScreen && <Footer user={user} navigate={navigate} />}
         </div>
     );
 }
