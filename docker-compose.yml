@@ -12,10 +12,6 @@ x-backend: &backend
                 cpus: '${API_CPUS:-0.50}'
                 memory: ${API_MEMORY:-256M}
 
-x-node-build: &node-build
-    context: .
-    dockerfile: services/Dockerfile
-
 x-mysql-client: &mysql-client
     MYSQL_HOST: mysql
     JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant dans .env}
@@ -67,8 +63,8 @@ services:
     event-service:
         <<: *backend
         build:
-            <<: *node-build
-            args: { SERVICE: event-service, PORT: 3002 }
+            context: .
+            dockerfile: services/event-service/Dockerfile
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/event-service:${TAG:-local}
         # migrations avant le démarrage (pas automatiques en production)
         command: ['sh', '-c', 'node dist/migrations/cli.js up && exec node dist/index.js']
@@ -84,8 +80,8 @@ services:
     ticket-service:
         <<: *backend
         build:
-            <<: *node-build
-            args: { SERVICE: ticket-service, PORT: 3003 }
+            context: .
+            dockerfile: services/ticket-service/Dockerfile
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/ticket-service:${TAG:-local}
         command: ['sh', '-c', 'node dist/migrations/cli.js up && exec node dist/index.js']
         environment:
@@ -102,8 +98,8 @@ services:
     notification-service:
         <<: *backend
         build:
-            <<: *node-build
-            args: { SERVICE: notification-service, PORT: 3004 }
+            context: .
+            dockerfile: services/notification-service/Dockerfile
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/notification-service:${TAG:-local}
         # egress : accès Internet pour le SMTP
         networks: [backend, egress]
@@ -124,7 +120,7 @@ services:
 
     # une base + un utilisateur par service (mysql/init)
     mysql:
-        image: mysql:8.4
+        image: mysql:8.4.13
         restart: ${RESTART_POLICY:-unless-stopped}
         networks: [backend]
         environment:
@@ -148,7 +144,7 @@ services:
                     memory: ${DB_MEMORY:-1G}
 
     redis:
-        image: redis:7-alpine
+        image: redis:7.4.11-alpine
         restart: ${RESTART_POLICY:-unless-stopped}
         networks: [backend]
         healthcheck:

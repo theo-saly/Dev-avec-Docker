@@ -73,7 +73,7 @@ Toutes les routes sont préfixées par `/api` côté navigateur. Erreurs au form
 
 ## Docker
 
-- **Dockerfiles** : `services/auth-service/Dockerfile`, `services/Dockerfile` (commun aux 3 services Node, service choisi par `--build-arg SERVICE=...`), `frontend/Dockerfile`, `reverse-proxy/Dockerfile`. Multi-stage, utilisateurs non-root, healthchecks, images Alpine.
+- **Dockerfiles** : un par service (`services/<service>/Dockerfile`, `frontend/Dockerfile`, `reverse-proxy/Dockerfile`). Multi-stage, utilisateurs non-root, healthchecks, images Alpine.
 - **Réseaux** : `frontend` (exposé), `backend` (`internal`, inaccessible depuis l'hôte et sans accès Internet), `egress` (sortie Internet pour notification-service uniquement).
 - **Environnements** : secrets dans `.env` (non commité, modèle `.env.example`), réglages par environnement dans `env/` :
 

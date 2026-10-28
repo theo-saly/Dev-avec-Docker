@@ -57,15 +57,15 @@ jobs:
                       port: 3001
                     - service: event-service
                       context: .
-                      file: services/Dockerfile
+                      file: services/event-service/Dockerfile
                       port: 3002
                     - service: ticket-service
                       context: .
-                      file: services/Dockerfile
+                      file: services/ticket-service/Dockerfile
                       port: 3003
                     - service: notification-service
                       context: .
-                      file: services/Dockerfile
+                      file: services/notification-service/Dockerfile
                       port: 3004
                     - service: reverse-proxy
                       context: reverse-proxy
