@@ -1,4 +1,12 @@
-FROM nginxinc/nginx-unprivileged:alpine
+FROM nginxinc/nginx-unprivileged:1.31.7-alpine
+
+LABEL maintainer="Équipe Dev-avec-Docker" \
+      description="reverse-proxy : seul point d'entrée, routage /api vers les backends" \
+      version="1.0.0" \
+      org.opencontainers.image.title="reverse-proxy" \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
+
 USER root
 RUN apk upgrade --no-cache
 USER nginx

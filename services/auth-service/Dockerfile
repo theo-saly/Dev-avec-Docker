@@ -1,18 +1,25 @@
-FROM composer:2 AS vendor
+FROM composer:2.10.3 AS builder
 WORKDIR /app
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --optimize-autoloader --no-scripts --no-interaction --prefer-dist
 
-FROM dunglas/frankenphp:1-php8.3-alpine
-WORKDIR /app
+FROM dunglas/frankenphp:1.13.4-php8.3-alpine AS production
+
+LABEL maintainer="Équipe Dev-avec-Docker" \
+      description="auth-service : comptes, rôles et JWT (PHP / Symfony)" \
+      version="1.0.0" \
+      org.opencontainers.image.title="auth-service" \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
 
 RUN apk upgrade --no-cache \
     && install-php-extensions pdo_mysql
 
 ENV APP_ENV=prod
+WORKDIR /app
 
 COPY . .
-COPY --from=vendor /app/vendor ./vendor
+COPY --from=builder /app/vendor ./vendor
 
 RUN php bin/console cache:warmup \
     && adduser -D appuser \

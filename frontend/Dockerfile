@@ -1,11 +1,19 @@
-FROM node:22-alpine AS builder
+FROM node:22.23.4-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:alpine
+FROM nginxinc/nginx-unprivileged:1.31.7-alpine AS production
+
+LABEL maintainer="Équipe Dev-avec-Docker" \
+      description="frontend : application React servie par nginx" \
+      version="1.0.0" \
+      org.opencontainers.image.title="frontend" \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
+
 USER root
 RUN apk upgrade --no-cache
 USER nginx
