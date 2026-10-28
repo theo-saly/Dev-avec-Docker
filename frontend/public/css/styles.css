@@ -26,6 +26,9 @@ body {
         radial-gradient(circle at 12% 14%, rgba(14, 116, 144, 0.13), transparent 30%),
         radial-gradient(circle at 85% 12%, rgba(234, 88, 12, 0.1), transparent 25%),
         linear-gradient(180deg, var(--bg-b), var(--bg-a));
+    background-color: var(--bg-a);
+    /* Sans cela, le dégradé se répète toutes les 100 % de hauteur d'écran. */
+    background-attachment: fixed;
 }
 
 html,
@@ -231,4 +234,505 @@ body.auth-no-scroll {
 .event-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+/* Structure : le footer reste en bas de page */
+.app-shell {
+    display: flex;
+    flex-direction: column;
+}
+
+.app-shell > main {
+    flex: 1 0 auto;
+}
+
+/* Page d'accueil */
+.home {
+    padding-top: 0;
+}
+
+.hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 28px;
+    padding: clamp(1.75rem, 5vw, 4rem);
+    color: #ffffff;
+    background:
+        radial-gradient(circle at 92% 8%, rgba(234, 88, 12, 0.3), transparent 32%),
+        linear-gradient(135deg, var(--brand-dark) 0%, #0b3c5d 55%, #12304f 100%);
+    box-shadow: 0 28px 48px -32px rgba(18, 48, 79, 0.8);
+}
+
+.hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+    background-size: 22px 22px;
+    pointer-events: none;
+}
+
+.hero-glow {
+    position: absolute;
+    bottom: -160px;
+    left: -100px;
+    width: 420px;
+    height: 420px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(14, 116, 144, 0.7), transparent 65%);
+    pointer-events: none;
+}
+
+.hero-grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 2.5rem;
+    align-items: center;
+}
+
+.hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.hero-title {
+    margin: 1.1rem 0;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: clamp(2rem, 4.6vw, 3.4rem);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+}
+
+.hero-lead {
+    margin-bottom: 1.75rem;
+    max-width: 34rem;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    opacity: 0.9;
+}
+
+.hero-meta {
+    list-style: none;
+    margin: 0 0 1.75rem;
+    padding: 0;
+    display: grid;
+    gap: 0.55rem;
+    font-size: 1.05rem;
+}
+
+.hero-meta i {
+    width: 1.6rem;
+    color: #fdba74;
+}
+
+.hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.hero .btn-light {
+    color: var(--brand-dark);
+}
+
+/* Faux billet, à droite de la bannière */
+.hero-ticket {
+    display: flex;
+    justify-self: center;
+    width: min(100%, 360px);
+    min-height: 220px;
+    transform: rotate(3deg);
+    filter: drop-shadow(0 24px 30px rgba(0, 0, 0, 0.35));
+}
+
+.ticket-main,
+.ticket-stub {
+    background: #ffffff;
+    color: var(--ink);
+    padding: 1.4rem 1.2rem;
+}
+
+.ticket-main {
+    flex: 1;
+    border-radius: 18px 0 0 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.ticket-stub {
+    flex: 0 0 38%;
+    border-radius: 0 18px 18px 0;
+    border-left: 2px dashed var(--line);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: #fff7ed;
+}
+
+.ticket-label {
+    margin: 0;
+    color: var(--accent);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.ticket-date {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-size: 1.3rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.ticket-date span {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 3.6rem;
+    line-height: 1;
+}
+
+.ticket-venue {
+    margin: 0;
+    color: var(--ink-soft);
+    font-weight: 600;
+}
+
+.ticket-big {
+    font-size: 4rem;
+    color: var(--brand);
+}
+
+.ticket-price {
+    margin: 0;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+.ticket-left {
+    margin: 0.4rem 0 0;
+    color: var(--ink-soft);
+    font-size: 0.8rem;
+}
+
+/* Atouts */
+.perks {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.perk {
+    display: flex;
+    gap: 0.9rem;
+    padding: 1.1rem 1.2rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.perk-icon,
+.step-icon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 12px;
+    color: var(--brand);
+    background: rgba(14, 116, 144, 0.1);
+}
+
+.perk-title {
+    margin: 0 0 0.15rem;
+    font-weight: 700;
+}
+
+.perk-text {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+/* Sections */
+.home-section {
+    margin-top: 3rem;
+}
+
+.section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 1.1rem;
+}
+
+.section-head h2 {
+    margin: 0;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+
+/* Cartes « Prochainement » */
+.home-event {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    text-align: left;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.home-event:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 30px -18px rgba(18, 48, 79, 0.55);
+}
+
+.home-event-cover {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    height: 120px;
+    padding: 0.9rem;
+    color: #ffffff;
+}
+
+.home-event-date {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 3.2rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: #ffffff;
+}
+
+.home-event-date strong {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.35rem;
+    line-height: 1.1;
+}
+
+.home-event-price {
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.home-event-body {
+    padding: 1rem 1.1rem 1.2rem;
+}
+
+.home-event-body h3 {
+    margin: 0 0 0.4rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--ink);
+}
+
+.home-event-body p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+}
+
+.home-event-body i {
+    width: 1.2rem;
+    color: var(--accent);
+}
+
+/* Étapes */
+.steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.step {
+    position: relative;
+    padding: 1.5rem 1.4rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.step h3 {
+    margin: 0.9rem 0 0.35rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.step p {
+    margin: 0;
+    color: var(--ink-soft);
+}
+
+.step-num {
+    position: absolute;
+    top: 1rem;
+    right: 1.2rem;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2.6rem;
+    font-weight: 700;
+    color: rgba(14, 116, 144, 0.12);
+    line-height: 1;
+}
+
+/* Appel à l'action final */
+.home-cta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 3rem;
+    padding: 2rem 2.25rem;
+    border-radius: 24px;
+    color: #ffffff;
+    background: linear-gradient(110deg, var(--accent), #c2410c);
+    box-shadow: 0 24px 40px -28px rgba(194, 65, 12, 0.9);
+}
+
+.home-cta h2 {
+    margin: 0 0 0.25rem;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+
+.home-cta p {
+    margin: 0;
+    opacity: 0.92;
+}
+
+.home-cta .btn-light {
+    color: #c2410c;
+}
+
+/* Footer commun */
+.site-footer {
+    margin-top: 3rem;
+    color: #cbd5e1;
+    background: #0f2740;
+}
+
+.footer-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 2rem;
+    padding-top: 2.5rem;
+    padding-bottom: 2rem;
+}
+
+.footer-brand {
+    margin: 0 0 0.5rem;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.footer-brand i {
+    color: var(--accent);
+}
+
+.footer-text {
+    margin: 0;
+    max-width: 22rem;
+    font-size: 0.92rem;
+    line-height: 1.55;
+}
+
+.footer-title {
+    margin: 0 0 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #ffffff;
+}
+
+.footer-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.45rem;
+    font-size: 0.92rem;
+}
+
+.footer-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #cbd5e1;
+    text-decoration: none;
+}
+
+.footer-link:hover {
+    color: #ffffff;
+    text-decoration: underline;
+}
+
+.footer-bottom {
+    padding: 1rem;
+    text-align: center;
+    font-size: 0.82rem;
+    color: #94a3b8;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 991px) {
+    .hero-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hero-ticket {
+        transform: rotate(2deg);
+    }
+
+    .perks,
+    .steps,
+    .footer-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 575px) {
+    .hero-actions .btn,
+    .home-cta .btn {
+        width: 100%;
+    }
 }
