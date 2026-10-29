@@ -6,6 +6,11 @@ Dépôt : https://github.com/theo-saly/Dev-avec-Docker – code rendu : branche 
 
 Pour ce projet, nous avons choisi de faire une billetterie d'événements. Un administrateur crée des événements (concerts, salons…) avec un nombre de places limité, et les utilisateurs connectés peuvent réserver des billets tant qu'il reste de la place.
 
+![Page d'accueil de l'application](images/page-accueil.png)
+
+*Figure 1 : la page d'accueil de l'application*
+
+
 ## Lancer le projet
 
 ```bash
@@ -43,9 +48,9 @@ Le frontend ne garde aucune session côté serveur. À la connexion, auth-servic
 
 Nous avons donné à chaque service sa propre base de données, sans clé étrangère entre elles. Chaque service reste ainsi indépendant, et quand ticket-service a besoin d'une information sur un événement, il la demande à event-service par son API.
 
-La sécurité ne repose pas sur le frontend. Masquer un bouton admin, c'est du confort : la vraie protection, ce sont les backends, qui renvoient une erreur 401 sans token et 403 sans les droits nécessaires.
+Les droits sont vérifiés par les backends eux-mêmes : une requête sans token reçoit une erreur 401, et une requête sans les droits nécessaires une erreur 403. Le frontend, lui, se contente de cacher les pages et les boutons auxquels l'utilisateur n'a pas accès.
 
-Côté règles métier :
+Les règles de gestion sont les suivantes :
 - l'inscription crée toujours un compte standard, même si quelqu'un essaie d'envoyer `"role": "admin"` ;
 - un admin peut supprimer des comptes standard, mais pas un autre admin ;
 - le dernier admin ne peut pas supprimer son propre compte, sinon plus personne ne pourrait gérer le site ;
@@ -60,13 +65,13 @@ Chaque backend a ses tests unitaires : 36 pour auth-service (PHPUnit), 17 pour e
 Chaque service a son propre Dockerfile. Au départ, les trois services Node partageaient un seul Dockerfile paramétré, mais nous l'avons séparé : le sujet insiste sur l'indépendance de chaque micro-service, et un fichier par service est plus simple à lire.
 
 Nous avons suivi les pratiques vues en cours :
-- **multi-stage** avec un stage `AS builder` et un stage `AS production`. Les outils qui servent uniquement à construire (Composer, TypeScript, Vite) ne se retrouvent pas dans l'image finale ;
-- les fichiers de dépendances (`package.json`, `composer.lock`) sont copiés **avant** le code. Comme ça, quand on modifie seulement le code, Docker réutilise son cache et ne réinstalle pas tout. On utilise `npm ci` et `composer install`, qui respectent exactement les versions des lockfiles ;
-- des **versions d'images précises** (`node:22.23.4-alpine`, `mysql:8.4.13`…) plutôt que des tags qui changent dans le temps ;
-- des **métadonnées** avec `LABEL` (auteur, description, version). La version n'est pas écrite à la main : la CI la passe au build avec `ARG VERSION`, donc le label d'une image correspond toujours à son tag ;
-- aucun conteneur ne tourne en **root**. C'est pour ça que les deux nginx écoutent sur le port 8080 : un utilisateur sans privilèges ne peut pas ouvrir un port inférieur à 1024 ;
-- des images **Alpine** pour qu'elles restent légères, avec un `apk upgrade` au build pour appliquer les derniers correctifs de sécurité. Nous avons aussi retiré npm des images Node finales, car il n'est plus utile une fois les dépendances installées ;
-- un **`HEALTHCHECK`** dans chaque image, aucun secret dans les images, et un `.dockerignore` pour ne pas envoyer de fichiers inutiles au build.
+- un build multi-stage avec un stage `AS builder` et un stage `AS production`. Les outils qui servent uniquement à construire (Composer, TypeScript, Vite) ne se retrouvent pas dans l'image finale ;
+- les fichiers de dépendances (`package.json`, `composer.lock`) sont copiés avant le code. Comme ça, quand on modifie seulement le code, Docker réutilise son cache et ne réinstalle pas tout. On utilise `npm ci` et `composer install`, qui respectent exactement les versions des lockfiles ;
+- des versions d'images précises (`node:22.23.4-alpine`, `mysql:8.4.13`…) plutôt que des tags qui changent dans le temps ;
+- des métadonnées avec `LABEL` (auteur, description, version). La version n'est pas écrite à la main : la CI la passe au build avec `ARG VERSION`, donc le label d'une image correspond toujours à son tag ;
+- aucun conteneur ne tourne en root. C'est pour ça que les deux nginx écoutent sur le port 8080 : un utilisateur sans privilèges ne peut pas ouvrir un port inférieur à 1024 ;
+- des images Alpine pour qu'elles restent légères, avec un `apk upgrade` au build pour appliquer les derniers correctifs de sécurité. Nous avons aussi retiré npm des images Node finales, car il n'est plus utile une fois les dépendances installées ;
+- un `HEALTHCHECK` dans chaque image, aucun secret dans les images, et un `.dockerignore` pour ne pas envoyer de fichiers inutiles au build.
 
 Pour le service PHP, nous avons choisi FrankenPHP. Le serveur intégré `php -S` est réservé au développement, et le couple nginx + php-fpm demande deux processus. FrankenPHP est prévu pour la production et tient dans un seul processus, ce qui respecte l'idée d'une application par conteneur.
 
@@ -94,7 +99,7 @@ Pour les environnements, les mots de passe restent dans le fichier `.env`, qui n
 
 ## 3. Git et CI/CD
 
-Nous avons tout mis dans un seul dépôt GitHub. Comme certains changements touchent plusieurs services à la fois (le format du token, les routes), c'était plus simple de les livrer ensemble. Chacun travaillait sur sa propre branche, et on fusionnait dans `main` par pull request.
+Nous avons tout mis dans un seul dépôt GitHub. Comme certains changements touchent plusieurs services à la fois (le format du token, les routes), c'était plus simple de les livrer ensemble. Chacun travaillait sur sa propre branche, et on fusionnait dans `main` par pull request. Les branches ont un préfixe selon leur contenu : `feat/` pour une fonctionnalité, `fix/` pour une correction, `docs/` pour la documentation. Quand une version était prête, on posait un tag (`v1.0.0`, puis `v1.1.0`, `v1.2.0` et `v1.2.1`) : le deuxième chiffre augmente quand on ajoute quelque chose, le troisième pour une correction.
 
 Le pipeline (`ci.yml`) se lance à chaque push, sur n'importe quelle branche, et à chaque tag de version (`v*`). Il enchaîne quatre étapes :
 1. les tests unitaires et le lint (Jest pour les services Node, PHPUnit pour auth-service) ;
@@ -104,13 +109,20 @@ Le pipeline (`ci.yml`) se lance à chaque push, sur n'importe quelle branche, et
 
 Si une étape échoue, la suite ne se lance pas : la construction des images attend que tous les tests soient passés. Chaque image reçoit un identifiant unique : `sha-<commit>` pour un commit, ou le nom du tag (par exemple `v1.2.1`) pour une version.
 
+![Historique des exécutions sur GitHub Actions](images/ci-github-actions.png)
+
+*Figure 2 : l'historique des exécutions sur GitHub Actions. Chaque push lance les trois workflows (CI, CodeQL et Security), sur toutes les branches comme sur le tag `v1.2.1`.*
+
+
+La mise en place n'a demandé aucun secret à configurer : la CI se connecte au registre GitHub avec le jeton fourni automatiquement à chaque exécution (`GITHUB_TOKEN`), auquel on donne seulement le droit de publier des paquets. Les six images sont construites en parallèle grâce à une matrice (un job par service), et leurs tags sont calculés par l'action `docker/metadata-action`. Les images sont publiques, donc les environnements UAT et PROD les récupèrent avec un simple `docker compose pull`.
+
 En plus de ce qui était demandé, nous avons ajouté gitleaks (pour détecter un secret commité par erreur), `npm audit`, une vérification du docker-compose et une analyse CodeQL.
 
 ## 4. Gestion de projet
 
 Nous avons organisé le travail avec un [tableau Trello](https://trello.com/invite/b/6ae079b00de9fcfb33c24de8/ATTI0c62284b5440f57ef76216b30944b929ECFEAB09/dev-avec-docker) en trois colonnes (*À faire*, *En cours*, *Terminé*). Chaque livrable avait sa carte, avec une checklist, une étiquette de domaine (Backend, Frontend, Infra, CI/CD, Sécurité, Rapport, Démo), un responsable et une échéance.
 
-**Répartition des tâches**
+### Répartition des tâches
 
 | | Inacio Rodrigues | Théo Saly |
 | --- | --- | --- |
@@ -122,7 +134,7 @@ Nous avons organisé le travail avec un [tableau Trello](https://trello.com/invi
 
 La première chose que nous avons faite, c'est nous mettre d'accord sur le contrat entre les services : le contenu du token, les codes d'erreur et les routes. Une fois ça fixé, chacun pouvait avancer de son côté sans attendre l'autre.
 
-**Planning**
+### Planning
 
 | Date | Livrable |
 | --- | --- |
@@ -145,7 +157,7 @@ En reprenant ce code, nous avons aussi trouvé une vraie faille : aucun service 
 
 L'ancien service d'authentification gardait les comptes en mémoire, ils disparaissaient donc à chaque redémarrage, et il n'y avait pas de rôles. Nous l'avons réécrit en PHP avec une vraie base MySQL, ce qui nous a aussi apporté le deuxième langage demandé.
 
-Côté Docker, nous avons rencontré plusieurs problèmes :
+Nous avons aussi rencontré plusieurs problèmes avec Docker :
 
 | Problème | Ce que nous avons fait |
 | --- | --- |
@@ -158,3 +170,5 @@ Côté Docker, nous avons rencontré plusieurs problèmes :
 Il reste une limite que nous n'avons pas eu le temps de corriger. Comme chaque service a sa propre base, supprimer un événement ou un compte ne supprime pas les billets qui y sont liés. La solution serait que ticket-service écoute le message `event-deleted`, déjà publié sur Redis, pour annuler les billets concernés.
 
 Nous savions déjà que Docker permet de lancer exactement la même application sur n'importe quelle machine, mais ce projet nous l'a fait vivre concrètement : une seule commande suffisait pour que nous ayons tous les deux la même application, avec les mêmes versions, sans rien installer d'autre. Si c'était à refaire, nous commencerions par là, en mettant en place le docker-compose avant même d'écrire le code des services.
+
+Nous ajouterions aussi un test de bout en bout dans la CI, qui lance tout le docker-compose et vérifie qu'une réservation fonctionne. Nos tests unitaires vérifient chaque service séparément, mais rien ne contrôle automatiquement qu'ils fonctionnent ensemble. Enfin, la vérification du token est copiée dans event-service et ticket-service : nous la mettrions dans un module partagé pour ne pas avoir à corriger deux fois le même code.
