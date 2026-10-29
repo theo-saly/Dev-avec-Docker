@@ -23,11 +23,11 @@ export default function AuthCard({
     };
 
     return (
-        <div className="card auth-page-card auth-form-card" id="auth-card">
-            <div className="card-header">
+        <div className="auth-form-card" id="auth-card">
+            <h2 className="auth-form-title">
                 {isLogin ? 'Connexion' : 'Créer un compte'}
-            </div>
-            <div className="card-body">
+            </h2>
+            <div>
                 <form onSubmit={handleSubmit} className="mb-0">
                     <div className="mb-3">
                         <label className="form-label">Email</label>

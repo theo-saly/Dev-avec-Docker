@@ -28,8 +28,9 @@ export default function AdminUsersPage({ token, pushMessage }: PageProps) {
     };
 
     return (
-        <section>
-            <h1 className="h3 mb-4">Comptes utilisateurs</h1>
+        <section className="page">
+            <h1 className="page-title">Comptes utilisateurs</h1>
+            <div className="table-wrap">
             <table className="table">
                 <thead>
                     <tr>
@@ -45,7 +46,7 @@ export default function AdminUsersPage({ token, pushMessage }: PageProps) {
                             <td>{u.id}</td>
                             <td>{u.email}</td>
                             <td>{u.role}</td>
-                            <td className="text-end">
+                            <td className="text-end text-nowrap">
                                 {u.role === 'standard' && (
                                     <button
                                         type="button"
@@ -60,6 +61,7 @@ export default function AdminUsersPage({ token, pushMessage }: PageProps) {
                     ))}
                 </tbody>
             </table>
+            </div>
         </section>
     );
 }

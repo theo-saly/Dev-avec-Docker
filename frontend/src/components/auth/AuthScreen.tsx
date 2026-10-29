@@ -17,17 +17,29 @@ export default function AuthScreen({
     return (
         <section className="auth-screen">
             <div className="auth-visual">
-                <img
-                    src="/images/auth-side.svg"
-                    alt="Billetterie"
-                    className="auth-visual-image"
-                />
-                <div className="auth-visual-overlay">
-                    <span className="badge text-bg-light border mb-3">
-                        Billetterie
+                <p className="auth-brand">
+                    <span className="brand-glyph">
+                        <i className="fas fa-ticket-alt" />
                     </span>
-                    <h1 className="display-6 fw-bold mb-3">{title}</h1>
-                    <p className="mb-0">{text}</p>
+                    Billetterie
+                </p>
+                <div className="auth-poster" aria-hidden="true">
+                    <div className="ticket ticket-hero">
+                        <div className="ticket-main">
+                            <p className="ticket-big-word">
+                                The
+                                <br />
+                                Weeknd
+                            </p>
+                        </div>
+                        <div className="ticket-stub">
+                            <span className="barcode" />
+                        </div>
+                    </div>
+                </div>
+                <div className="auth-visual-overlay">
+                    <h1>{title}</h1>
+                    <p>{text}</p>
                 </div>
             </div>
 
