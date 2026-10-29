@@ -5,11 +5,13 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts --no-interactio
 
 FROM dunglas/frankenphp:1.13.4-php8.3-alpine AS production
 
+# Version de l'image, fournie par la CI (nom du tag Git ou sha du commit)
+ARG VERSION=dev
 LABEL maintainer="Équipe Dev-avec-Docker" \
       description="auth-service : comptes, rôles et JWT (PHP / Symfony)" \
-      version="1.0.0" \
+      version="${VERSION}" \
       org.opencontainers.image.title="auth-service" \
-      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
 
 RUN apk upgrade --no-cache \

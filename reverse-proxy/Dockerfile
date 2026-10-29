@@ -1,10 +1,12 @@
 FROM nginxinc/nginx-unprivileged:1.31.7-alpine
 
+# Version de l'image, fournie par la CI (nom du tag Git ou sha du commit)
+ARG VERSION=dev
 LABEL maintainer="Équipe Dev-avec-Docker" \
       description="reverse-proxy : seul point d'entrée, routage /api vers les backends" \
-      version="1.0.0" \
+      version="${VERSION}" \
       org.opencontainers.image.title="reverse-proxy" \
-      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
 
 USER root

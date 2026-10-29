@@ -7,11 +7,13 @@ RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:1.31.7-alpine AS production
 
+# Version de l'image, fournie par la CI (nom du tag Git ou sha du commit)
+ARG VERSION=dev
 LABEL maintainer="Équipe Dev-avec-Docker" \
       description="frontend : application React servie par nginx" \
-      version="1.0.0" \
+      version="${VERSION}" \
       org.opencontainers.image.title="frontend" \
-      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
 
 USER root

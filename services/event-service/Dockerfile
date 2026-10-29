@@ -13,11 +13,13 @@ RUN npm run build --workspace services/event-service
 
 FROM node:22.23.4-alpine AS production
 
+# Version de l'image, fournie par la CI (nom du tag Git ou sha du commit)
+ARG VERSION=dev
 LABEL maintainer="Équipe Dev-avec-Docker" \
       description="event-service : catalogue des événements (Node.js / Express)" \
-      version="1.0.0" \
+      version="${VERSION}" \
       org.opencontainers.image.title="event-service" \
-      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
 
 RUN apk upgrade --no-cache

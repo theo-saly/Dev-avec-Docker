@@ -19,7 +19,9 @@ x-mysql-client: &mysql-client
 
 services:
     reverse-proxy:
-        build: ./reverse-proxy
+        build:
+            context: ./reverse-proxy
+            args: { VERSION: "${TAG:-local}" }
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/reverse-proxy:${TAG:-local}
         restart: ${RESTART_POLICY:-unless-stopped}
         ports:
@@ -35,7 +37,9 @@ services:
                 limits: { cpus: '0.25', memory: 64M }
 
     frontend:
-        build: ./frontend
+        build:
+            context: ./frontend
+            args: { VERSION: "${TAG:-local}" }
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/frontend:${TAG:-local}
         restart: ${RESTART_POLICY:-unless-stopped}
         networks: [frontend]
@@ -45,7 +49,9 @@ services:
 
     auth-service:
         <<: *backend
-        build: ./services/auth-service
+        build:
+            context: ./services/auth-service
+            args: { VERSION: "${TAG:-local}" }
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/auth-service:${TAG:-local}
         environment:
             APP_SECRET: ${APP_SECRET:?APP_SECRET manquant dans .env}
@@ -65,6 +71,7 @@ services:
         build:
             context: .
             dockerfile: services/event-service/Dockerfile
+            args: { VERSION: "${TAG:-local}" }
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/event-service:${TAG:-local}
         # migrations avant le démarrage (pas automatiques en production)
         command: ['sh', '-c', 'node dist/migrations/cli.js up && exec node dist/index.js']
@@ -82,6 +89,7 @@ services:
         build:
             context: .
             dockerfile: services/ticket-service/Dockerfile
+            args: { VERSION: "${TAG:-local}" }
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/ticket-service:${TAG:-local}
         command: ['sh', '-c', 'node dist/migrations/cli.js up && exec node dist/index.js']
         environment:
@@ -100,6 +108,7 @@ services:
         build:
             context: .
             dockerfile: services/notification-service/Dockerfile
+            args: { VERSION: "${TAG:-local}" }
         image: ${REGISTRY:-ghcr.io/theo-saly/dev-avec-docker}/notification-service:${TAG:-local}
         # egress : accès Internet pour le SMTP
         networks: [backend, egress]

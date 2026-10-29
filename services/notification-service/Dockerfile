@@ -13,11 +13,13 @@ RUN npm run build --workspace services/notification-service
 
 FROM node:22.23.4-alpine AS production
 
+# Version de l'image, fournie par la CI (nom du tag Git ou sha du commit)
+ARG VERSION=dev
 LABEL maintainer="Équipe Dev-avec-Docker" \
       description="notification-service : notifications de réservation (Node.js)" \
-      version="1.0.0" \
+      version="${VERSION}" \
       org.opencontainers.image.title="notification-service" \
-      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
 
 RUN apk upgrade --no-cache

@@ -99,8 +99,7 @@ jobs:
                   context: ${{ matrix.context }}
                   file: ${{ matrix.file }}
                   build-args: |
-                      SERVICE=${{ matrix.service }}
-                      PORT=${{ matrix.port }}
+                      VERSION=${{ steps.meta.outputs.version }}
                   load: true
                   tags: ${{ steps.meta.outputs.tags }}
             # Figée sur le SHA du commit (v0.36.0) : un tag peut être déplacé, pas un SHA
