@@ -1,21 +1,24 @@
 # Rapport de projet – Dév avec Docker
 
 **Billetterie d'événements en micro-services**
-Dépôt : https://github.com/theo-saly/Dev-avec-Docker – version rendue : tag `v1.0.0`
+**Auteurs :** Inacio Rodrigues, Théo Saly
+Dépôt : https://github.com/theo-saly/Dev-avec-Docker – code rendu : branche `main` – dernière version publiée : tag `v1.2.1`
 
-Un administrateur crée des événements (concerts, salons), un utilisateur connecté réserve des billets dans la limite des places disponibles.
+Pour ce projet, nous avons choisi de faire une billetterie d'événements. Un administrateur crée des événements (concerts, salons…) avec un nombre de places limité, et les utilisateurs connectés peuvent réserver des billets tant qu'il reste de la place.
 
-## Lancement
+## Lancer le projet
 
 ```bash
 git clone https://github.com/theo-saly/Dev-avec-Docker.git && cd Dev-avec-Docker
-cp .env.example .env          # remplacer chaque valeur "remplacer-..."
+cp .env.example .env          # puis remplacer chaque valeur "remplacer-..."
 docker compose --env-file env/test.env --env-file .env up -d --build --wait
 ```
 
-Application sur http://localhost:8080. Compte admin : `ADMIN_EMAIL` / `ADMIN_PASSWORD` du `.env`.
+L'application est ensuite accessible sur http://localhost:8080. Le compte administrateur est celui renseigné dans le `.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`).
 
 ## 1. Architecture logicielle
+
+L'application est découpée en six conteneurs applicatifs, plus MySQL et Redis :
 
 ```
 Navigateur ──► reverse-proxy :8080 (nginx, seul port exposé)
@@ -29,91 +32,129 @@ event-service / ticket-service ── Redis Streams ──► notification-servi
 
 | Service | Langage | Rôle |
 | --- | --- | --- |
-| frontend | React / nginx | Interface, garde de routes `public` / `auth` / `admin` |
-| reverse-proxy | nginx | Unique point d'entrée, en-têtes de sécurité |
-| auth-service | PHP 8.3 / Symfony 7.4 | Comptes, rôles, émission des JWT |
-| event-service | Node 22 / Express | Catalogue (lecture : connecté, écriture : admin) |
-| ticket-service | Node 22 / Express | Réservations avec contrôle de capacité |
-| notification-service | Node 22 | Consomme les événements Redis, journalise, SMTP optionnel |
+| frontend | React / nginx | L'interface, avec une garde de routes `public` / `auth` / `admin` |
+| reverse-proxy | nginx | Le seul point d'entrée, qui redirige vers le bon service |
+| auth-service | PHP 8.3 / Symfony 7.4 | Les comptes, les rôles et la création des tokens JWT |
+| event-service | Node 22 / Express | Le catalogue : tout le monde peut le lire une fois connecté, seul l'admin le modifie |
+| ticket-service | Node 22 / Express | Les réservations, avec le contrôle du nombre de places |
+| notification-service | Node 22 | Reçoit les événements de Redis et les journalise (envoi de mail possible) |
 
-**Choix principaux :**
+Le frontend ne garde aucune session côté serveur. À la connexion, auth-service renvoie un token JWT qui contient l'identifiant, l'email et le rôle de l'utilisateur. Chaque backend vérifie ce token lui-même avec un secret partagé, donc aucun service n'a besoin d'appeler auth-service à chaque requête. Pour se déconnecter, le frontend supprime simplement le token.
 
-- **Frontend sans état** : aucune session côté serveur. auth-service émet un JWT HS256 `{ id, email, role }` que chaque backend vérifie lui-même avec le secret partagé. La déconnexion supprime le token côté client.
-- **Une base par service**, sans clé étrangère entre services : chaque service reste autonome, la cohérence passe par l'API.
-- **Règles d'accès appliquées par les backends** (401 sans token, 403 sans droit) : le masquage dans le frontend n'est que du confort.
-- **Règles métier** : l'inscription crée toujours un compte standard ; un admin ne supprime que des comptes standard ; le dernier admin ne peut pas supprimer son compte ; une réservation est refusée (409) si elle dépasse la capacité, contrôle fait dans une transaction MySQL avec verrou (`SELECT … FOR UPDATE`).
-- **Tests unitaires** : auth 36 (PHPUnit), event 17, ticket 19, notification 4 (Jest).
+Nous avons donné à chaque service sa propre base de données, sans clé étrangère entre elles. Chaque service reste ainsi indépendant, et quand ticket-service a besoin d'une information sur un événement, il la demande à event-service par son API.
+
+La sécurité ne repose pas sur le frontend. Masquer un bouton admin, c'est du confort : la vraie protection, ce sont les backends, qui renvoient une erreur 401 sans token et 403 sans les droits nécessaires.
+
+Côté règles métier :
+- l'inscription crée toujours un compte standard, même si quelqu'un essaie d'envoyer `"role": "admin"` ;
+- un admin peut supprimer des comptes standard, mais pas un autre admin ;
+- le dernier admin ne peut pas supprimer son propre compte, sinon plus personne ne pourrait gérer le site ;
+- une réservation est refusée (409) quand il n'y a plus assez de places. Le calcul se fait dans une transaction MySQL avec un verrou (`SELECT … FOR UPDATE`), pour que deux réservations simultanées ne dépassent pas la capacité.
+
+Chaque backend a ses tests unitaires : 36 pour auth-service (PHPUnit), 17 pour event-service, 19 pour ticket-service et 4 pour notification-service (Jest).
 
 ## 2. Dockerfiles et docker-compose
 
-**Dockerfiles** (un pour auth, un commun aux 3 services Node, un pour le frontend, un pour le reverse-proxy) :
+### Les Dockerfiles
 
-- multi-stage : les outils de build (Composer, TypeScript, Vite) ne sont pas dans l'image finale ;
-- fichiers de dépendances copiés avant le code pour profiter du cache ; `npm ci` et `composer install` depuis les lockfiles ;
-- utilisateur non-root dans chaque conteneur (les nginx écoutent donc sur 8080) ;
-- images Alpine, `apk upgrade` au build, npm retiré des images Node finales ;
-- `HEALTHCHECK` sur `/health`, aucun secret dans les images, `.dockerignore` partout ;
-- PHP servi par FrankenPHP : prévu pour la production et en un seul processus, contrairement à `php -S` (développement) ou nginx + php-fpm (deux processus).
+Chaque service a son propre Dockerfile. Au départ, les trois services Node partageaient un seul Dockerfile paramétré, mais nous l'avons séparé : le sujet insiste sur l'indépendance de chaque micro-service, et un fichier par service est plus simple à lire.
 
-Trivy : aucune faille CRITICAL sur les 6 images (64 à 198 Mo).
+Nous avons suivi les pratiques vues en cours :
+- **multi-stage** avec un stage `AS builder` et un stage `AS production`. Les outils qui servent uniquement à construire (Composer, TypeScript, Vite) ne se retrouvent pas dans l'image finale ;
+- les fichiers de dépendances (`package.json`, `composer.lock`) sont copiés **avant** le code. Comme ça, quand on modifie seulement le code, Docker réutilise son cache et ne réinstalle pas tout. On utilise `npm ci` et `composer install`, qui respectent exactement les versions des lockfiles ;
+- des **versions d'images précises** (`node:22.23.4-alpine`, `mysql:8.4.13`…) plutôt que des tags qui changent dans le temps ;
+- des **métadonnées** avec `LABEL` (auteur, description, version). La version n'est pas écrite à la main : la CI la passe au build avec `ARG VERSION`, donc le label d'une image correspond toujours à son tag ;
+- aucun conteneur ne tourne en **root**. C'est pour ça que les deux nginx écoutent sur le port 8080 : un utilisateur sans privilèges ne peut pas ouvrir un port inférieur à 1024 ;
+- des images **Alpine** pour qu'elles restent légères, avec un `apk upgrade` au build pour appliquer les derniers correctifs de sécurité. Nous avons aussi retiré npm des images Node finales, car il n'est plus utile une fois les dépendances installées ;
+- un **`HEALTHCHECK`** dans chaque image, aucun secret dans les images, et un `.dockerignore` pour ne pas envoyer de fichiers inutiles au build.
 
-**docker-compose.yml** : 8 conteneurs lancés en une commande.
+Pour le service PHP, nous avons choisi FrankenPHP. Le serveur intégré `php -S` est réservé au développement, et le couple nginx + php-fpm demande deux processus. FrankenPHP est prévu pour la production et tient dans un seul processus, ce qui respecte l'idée d'une application par conteneur.
 
-- **Réseaux** : seul le reverse-proxy publie un port. Le réseau `backend` est `internal` : ni l'hôte ni Internet n'atteignent les backends, MySQL et Redis. Seul notification-service a une sortie Internet (réseau `egress`, pour le SMTP).
-- **MySQL** : une instance, mais une base et un utilisateur par service ; l'utilisateur `events` n'a aucun droit sur la base `auth`.
-- **Démarrage ordonné** : `depends_on` avec `condition: service_healthy` ; migrations lancées au démarrage des conteneurs.
-- **Limites CPU / mémoire** sur chaque conteneur, réglables par environnement.
-- **Environnements** : secrets dans `.env` (jamais commité), réglages dans `env/test.env`, `env/uat.env`, `env/prod.env`.
+Le scanner Trivy ne trouve aucune faille critique sur nos 6 images, qui font entre 64 et 198 Mo.
+
+### Le docker-compose
+
+Toute l'application (8 conteneurs) se lance avec une seule commande.
+
+Seul le reverse-proxy publie un port vers l'extérieur. Les backends, MySQL et Redis sont sur un réseau marqué `internal` : on ne peut pas les joindre depuis la machine, et eux ne peuvent pas sortir sur Internet. La seule exception est notification-service, qui a accès à un réseau `egress` pour pouvoir envoyer des mails.
+
+Nous utilisons une seule instance MySQL, mais avec une base et un utilisateur différents pour chaque service. Par exemple, l'utilisateur de event-service n'a aucun droit sur la base des comptes.
+
+Les services démarrent dans le bon ordre grâce à `depends_on` avec `condition: service_healthy` : un service attend que MySQL soit vraiment prêt avant de démarrer, et ses migrations se lancent au démarrage. Chaque conteneur a aussi des limites de CPU et de mémoire. Nous les avons ajustées après mesure : MySQL utilisait 476 Mo sur les 512 Mo autorisés, nous sommes donc passés à 1 Go.
+
+Pour les environnements, les mots de passe restent dans le fichier `.env`, qui n'est jamais commité. Les réglages propres à chaque environnement sont dans `env/test.env`, `env/uat.env` et `env/prod.env` :
 
 | | TEST | UAT | PROD |
 | --- | --- | --- | --- |
-| Images | build local (`build:`) | CI, tag `sha-<commit>` | CI, tag `v1.0.0` |
+| Images | construites en local (`build:`) | publiées par la CI, tag `sha-<commit>` | publiées par la CI, tag `v1.2.1` |
 | Port | 8080 | 8081 | 80 |
-| Redémarrage | non | `unless-stopped` | `always` |
+| Redémarrage automatique | non | `unless-stopped` | `always` |
 | Backends | 0,5 CPU / 256 Mo | 0,5 CPU / 256 Mo | 1 CPU / 512 Mo |
 | MySQL | 1 Go | 1 Go | 2 Go |
 
 ## 3. Git et CI/CD
 
-- **Monorepo GitHub** : un dépôt, un pipeline, des changements transverses (contrat JWT, routes) livrés ensemble. Branches de travail par personne, fusion dans `main` par pull request.
-- **Pipeline** `ci.yml`, déclenché à chaque push sur toute branche et à chaque tag `v*` :
-  1. tests unitaires (Jest pour les 3 services Node, PHPUnit pour auth) et lint ;
-  2. build de l'image de chaque service (6 images) ;
-  3. scan Trivy, bloquant sur CRITICAL : une image vulnérable n'est jamais publiée ;
-  4. push sur le registre GHCR (images publiques).
-- **Échec immédiat** : le build ne démarre que si tous les tests passent (`needs`), `fail-fast` arrête la matrice au premier échec.
-- **Identifiant unique** : `sha-<commit complet>` à chaque commit, nom du tag (`v1.0.0`) pour une version.
-- **Ajouts** : gitleaks (secrets commités), `npm audit`, validation du compose, CodeQL ; action Trivy figée sur un SHA de commit.
+Nous avons tout mis dans un seul dépôt GitHub. Comme certains changements touchent plusieurs services à la fois (le format du token, les routes), c'était plus simple de les livrer ensemble. Chacun travaillait sur sa propre branche, et on fusionnait dans `main` par pull request.
+
+Le pipeline (`ci.yml`) se lance à chaque push, sur n'importe quelle branche, et à chaque tag de version (`v*`). Il enchaîne quatre étapes :
+1. les tests unitaires et le lint (Jest pour les services Node, PHPUnit pour auth-service) ;
+2. la construction de l'image de chaque service (6 images) ;
+3. un scan de sécurité avec Trivy, qui bloque si une faille critique est trouvée. Une image vulnérable n'est donc jamais publiée ;
+4. la publication des images sur le registre GitHub (GHCR).
+
+Si une étape échoue, la suite ne se lance pas : la construction des images attend que tous les tests soient passés. Chaque image reçoit un identifiant unique : `sha-<commit>` pour un commit, ou le nom du tag (par exemple `v1.2.1`) pour une version.
+
+En plus de ce qui était demandé, nous avons ajouté gitleaks (pour détecter un secret commité par erreur), `npm audit`, une vérification du docker-compose et une analyse CodeQL.
 
 ## 4. Gestion de projet
 
-**Méthode** : [tableau Kanban Trello](https://trello.com/invite/b/6ae079b00de9fcfb33c24de8/ATTI0c62284b5440f57ef76216b30944b929ECFEAB09/dev-avec-docker) à trois colonnes (*À faire*, *En cours*, *Terminé*), une carte par livrable avec checklist, étiquette de domaine (Backend, Frontend, Infra, CI/CD, Sécurité, Rapport, Démo), responsable et échéance.
+Nous avons organisé le travail avec un [tableau Trello](https://trello.com/invite/b/6ae079b00de9fcfb33c24de8/ATTI0c62284b5440f57ef76216b30944b929ECFEAB09/dev-avec-docker) en trois colonnes (*À faire*, *En cours*, *Terminé*). Chaque livrable avait sa carte, avec une checklist, une étiquette de domaine (Backend, Frontend, Infra, CI/CD, Sécurité, Rapport, Démo), un responsable et une échéance.
+
+**Répartition des tâches**
+
+| | Inacio Rodrigues | Théo Saly |
+| --- | --- | --- |
+| Backends | auth-service (PHP / Symfony) | event-service, ticket-service, notification-service (Node) |
+| Frontend et accès | | frontend React, reverse-proxy |
+| Docker | Dockerfiles, docker-compose, environnements TEST / UAT / PROD | |
+| CI/CD | | pipeline GitHub Actions, CodeQL, gitleaks |
+| Rapport | Dockerfiles, compose, gestion de projet | architecture, CI/CD |
+
+La première chose que nous avons faite, c'est nous mettre d'accord sur le contrat entre les services : le contenu du token, les codes d'erreur et les routes. Une fois ça fixé, chacun pouvait avancer de son côté sans attendre l'autre.
 
 **Planning**
 
 | Date | Livrable |
 | --- | --- |
-| 22/10 | Contrat d'interface JWT figé |
-| 24/10 | Services Node, reverse-proxy, frontend et pipeline CI (branche B) |
-| 26/10 | auth-service PHP, Dockerfiles, compose, intégration, README et rapport (branche A) |
-| 27-28/10 | Tests de bout en bout, captures CI, rapport |
-| 29/10 | Fusion dans `main`, tag `v1.0.0`, préparation de la démo |
-
-
+| 22/10 | Contrat d'interface entre les services fixé |
+| 24/10 | Services Node, reverse-proxy, frontend et pipeline CI (Théo) |
+| 26/10 | auth-service PHP, Dockerfiles, compose, intégration, README et rapport (Inacio) |
+| 26/10 | Fusion dans `main`, tag `v1.0.0` |
+| 27-28/10 | Tests de bout en bout, captures de la CI, rapport |
+| 28/10 | Un Dockerfile par service, selon les pratiques du cours, tag `v1.1.0` |
+| 28/10 | Nouvelle page d'accueil et footer commun |
+| 29/10 | Version des images injectée par la CI, tag `v1.2.1` |
+| 29/10 | Refonte de l'interface (toutes les pages) et accessibilité |
+| 30/10 | Démonstration |
 
 ## 5. Rétrospective
 
-| Difficulté | Solution |
+Nous sommes partis d'un projet existant de gestion de tâches, en pensant gagner du temps. En pratique, on a passé beaucoup de temps à supprimer du code avant de pouvoir en écrire : une base SQLite, deux versions de l'API, une API gateway… Avec le recul, partir d'un projet vierge aurait sûrement été plus rapide.
+
+En reprenant ce code, nous avons aussi trouvé une vraie faille : aucun service ne vérifiait le token, et il suffisait de changer un paramètre dans l'URL pour lire les données de quelqu'un d'autre. Nous avons ajouté une vérification du token dans chaque service, et l'identité de l'utilisateur est maintenant lue uniquement dans le token.
+
+L'ancien service d'authentification gardait les comptes en mémoire, ils disparaissaient donc à chaque redémarrage, et il n'y avait pas de rôles. Nous l'avons réécrit en PHP avec une vraie base MySQL, ce qui nous a aussi apporté le deuxième langage demandé.
+
+Côté Docker, nous avons rencontré plusieurs problèmes :
+
+| Problème | Ce que nous avons fait |
 | --- | --- |
-| Départ d'un projet existant (gestion de tâches) : beaucoup de code à supprimer (SQLite, API v1/v2, gateway) | Nettoyage puis renommage vers le domaine billetterie |
-| Faille d'origine : aucun service ne vérifiait le token, n'importe qui lisait les données de n'importe qui | Middleware JWT dans chaque service, identité lue uniquement dans le token |
-| Comptes stockés en mémoire, sans rôles | auth-service réécrit en PHP avec MySQL (apporte aussi le 2e langage) |
-| Failles CRITICAL bloquant la CI (Trivy, npm audit) | Mises à jour sans version majeure, npm retiré des images finales |
-| Logs non inscriptibles par l'utilisateur non-root dans un volume | Dossier créé dans l'image avec le bon propriétaire |
-| MySQL proche de sa limite mémoire (476 Mo sur 512) | Limite portée à 1 Go après mesure |
+| Des failles critiques bloquaient la CI (Trivy, `npm audit`) | Mise à jour des dépendances concernées, et suppression de npm dans les images finales |
+| notification-service ne pouvait pas écrire ses logs dans son volume, parce qu'il ne tourne pas en root | Créer le dossier de logs dans l'image avec le bon propriétaire |
+| MySQL était presque à sa limite de mémoire (476 Mo sur 512) | Passer la limite à 1 Go après l'avoir mesurée |
+| Un seul Dockerfile pour les trois services Node, ce qui allait contre l'indépendance des micro-services | Un Dockerfile par service |
+| Le label `version` des images était resté à `1.0.0` alors qu'on en était à la `v1.2.0` | Faire passer la version par la CI au moment du build (`ARG VERSION`), en plaçant ce bloc à la fin du Dockerfile pour ne pas casser le cache |
 
-**Limite connue** : chaque service ayant sa propre base, sans clé étrangère, supprimer un événement ou un compte ne supprime pas les billets associés. La correction consisterait à faire écouter le message `event-deleted` (déjà publié sur Redis) par ticket-service pour annuler les billets.
+Il reste une limite que nous n'avons pas eu le temps de corriger. Comme chaque service a sa propre base, supprimer un événement ou un compte ne supprime pas les billets qui y sont liés. La solution serait que ticket-service écoute le message `event-deleted`, déjà publié sur Redis, pour annuler les billets concernés.
 
-**Si c'était à refaire** : partir d'un projet vierge ; écrire le compose et la CI dès le premier jour pour intégrer en continu ; ajouter en CI un test de bout en bout lançant tout le compose ; partager le middleware JWT dans un package commun plutôt que le copier dans chaque service.
-
-**Usage de l'IA** : un assistant IA a été utilisé pour une partie du code et des fichiers Docker. Chaque fichier a été relu et testé en conditions réelles (stack complète, scans Trivy, tests d'isolation réseau).
+Nous savions déjà que Docker permet de lancer exactement la même application sur n'importe quelle machine, mais ce projet nous l'a fait vivre concrètement : une seule commande suffisait pour que nous ayons tous les deux la même application, avec les mêmes versions, sans rien installer d'autre. Si c'était à refaire, nous commencerions par là, en mettant en place le docker-compose avant même d'écrire le code des services.
