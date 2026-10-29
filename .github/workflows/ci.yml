@@ -21,7 +21,6 @@ jobs:
               with:
                   node-version: 22
                   cache: 'npm'
-            # Monorepo en workspaces : les dépendances s'installent depuis la racine.
             - run: npm ci
             - run: npm run lint
               working-directory: services/${{ matrix.service }}
@@ -77,7 +76,6 @@ jobs:
                       port: 80
         steps:
             - uses: actions/checkout@v4
-            # Les noms d'image Docker doivent être en minuscules.
             - name: Nom de l'image
               run: echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY,,}/${{ matrix.service }}" >> "$GITHUB_ENV"
             - uses: docker/setup-buildx-action@v3
@@ -93,7 +91,6 @@ jobs:
                   tags: |
                       type=sha,format=long
                       type=ref,event=tag
-            # Build local (load: true) : rien n'est poussé avant le scan Trivy.
             - uses: docker/build-push-action@v6
               with:
                   context: ${{ matrix.context }}
@@ -103,7 +100,6 @@ jobs:
                       PORT=${{ matrix.port }}
                   load: true
                   tags: ${{ steps.meta.outputs.tags }}
-            # Figée sur le SHA du commit (v0.36.0) : un tag peut être déplacé, pas un SHA
             - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
               with:
                   image-ref: ${{ env.IMAGE }}:sha-${{ github.sha }}

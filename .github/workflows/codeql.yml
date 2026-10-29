@@ -16,7 +16,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                # CodeQL ne supporte pas PHP : auth-service n'est pas analysé.
+                # auth-service ignore
                 language: [actions, javascript-typescript]
         steps:
             - uses: actions/checkout@v4
