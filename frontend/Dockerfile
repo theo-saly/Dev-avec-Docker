@@ -7,15 +7,6 @@ RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:1.31.7-alpine AS production
 
-# Version de l'image, fournie par la CI (nom du tag Git ou sha du commit)
-ARG VERSION=dev
-LABEL maintainer="Équipe Dev-avec-Docker" \
-      description="frontend : application React servie par nginx" \
-      version="${VERSION}" \
-      org.opencontainers.image.title="frontend" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
-
 USER root
 RUN apk upgrade --no-cache
 USER nginx
@@ -27,3 +18,12 @@ EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1
+
+# En dernier : la version change à chaque build, elle ne doit pas invalider le cache des couches précédentes
+ARG VERSION=dev
+LABEL maintainer="Équipe Dev-avec-Docker" \
+      description="frontend : application React servie par nginx" \
+      version="${VERSION}" \
+      org.opencontainers.image.title="frontend" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
