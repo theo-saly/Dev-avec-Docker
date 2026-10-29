@@ -13,13 +13,6 @@ RUN npm run build --workspace services/ticket-service
 
 FROM node:22.23.4-alpine AS production
 
-LABEL maintainer="Équipe Dev-avec-Docker" \
-      description="ticket-service : réservations avec contrôle de capacité (Node.js / Express)" \
-      version="1.0.0" \
-      org.opencontainers.image.title="ticket-service" \
-      org.opencontainers.image.version="1.0.0" \
-      org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
-
 RUN apk upgrade --no-cache
 
 WORKDIR /app
@@ -45,5 +38,14 @@ EXPOSE 3003
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
     CMD wget -qO- http://127.0.0.1:3003/health || exit 1
+
+# En dernier : la version change à chaque build, elle ne doit pas invalider le cache des couches précédentes
+ARG VERSION=dev
+LABEL maintainer="Équipe Dev-avec-Docker" \
+      description="ticket-service : réservations avec contrôle de capacité (Node.js / Express)" \
+      version="${VERSION}" \
+      org.opencontainers.image.title="ticket-service" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
 
 CMD ["node", "dist/index.js"]

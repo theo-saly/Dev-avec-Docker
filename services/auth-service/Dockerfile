@@ -5,13 +5,6 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts --no-interactio
 
 FROM dunglas/frankenphp:1.13.4-php8.3-alpine AS production
 
-LABEL maintainer="Équipe Dev-avec-Docker" \
-      description="auth-service : comptes, rôles et JWT (PHP / Symfony)" \
-      version="1.0.0" \
-      org.opencontainers.image.title="auth-service" \
-      org.opencontainers.image.version="1.0.0" \
-      org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
-
 RUN apk upgrade --no-cache \
     && install-php-extensions pdo_mysql
 
@@ -31,6 +24,15 @@ EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD wget -qO- http://127.0.0.1:3001/health || exit 1
+
+# En dernier : la version change à chaque build, elle ne doit pas invalider le cache des couches précédentes
+ARG VERSION=dev
+LABEL maintainer="Équipe Dev-avec-Docker" \
+      description="auth-service : comptes, rôles et JWT (PHP / Symfony)" \
+      version="${VERSION}" \
+      org.opencontainers.image.title="auth-service" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/theo-saly/Dev-avec-Docker"
 
 # app:install crée la table users et le compte admin
 CMD ["sh", "-c", "php bin/console app:install && exec frankenphp php-server --listen :3001 --root public/"]
