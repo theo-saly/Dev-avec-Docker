@@ -28,18 +28,29 @@ export default function AccountPage({
         }
     };
 
-    if (!account) return <p className="text-muted">Chargement…</p>;
+    if (!account) return <p className="empty">Chargement…</p>;
 
     return (
-        <section>
-            <h1 className="h3 mb-4">Mon compte</h1>
-            <div className="card">
-                <div className="card-body">
-                    <p className="mb-1">
-                        <strong>Email :</strong> {account.email}
-                    </p>
-                    <p className="mb-3">
-                        <strong>Rôle :</strong> {account.role}
+        <section className="page page-narrow">
+            <h1 className="page-title">Mon compte</h1>
+            <div className="panel">
+                <div className="account-head">
+                    <span className="avatar">
+                        {account.email.charAt(0).toUpperCase()}
+                    </span>
+                    <div>
+                        <p className="account-mail">{account.email}</p>
+                        <span className="chip">
+                            {account.role === 'admin'
+                                ? 'Administrateur'
+                                : 'Compte standard'}
+                        </span>
+                    </div>
+                </div>
+                <div className="danger-zone">
+                    <h2 className="h6">Supprimer mon compte</h2>
+                    <p className="text-muted">
+                        Votre compte sera supprimé définitivement.
                     </p>
                     {!confirming ? (
                         <button
@@ -50,8 +61,8 @@ export default function AccountPage({
                             Supprimer mon compte
                         </button>
                     ) : (
-                        <div className="d-flex gap-2 align-items-center">
-                            <span>Cette action est définitive. Confirmer ?</span>
+                        <div className="d-flex flex-wrap gap-2 align-items-center">
+                            <strong>Cette action est définitive. Confirmer ?</strong>
                             <button
                                 type="button"
                                 className="btn btn-danger"

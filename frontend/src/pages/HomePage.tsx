@@ -1,66 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { api, formatDate, formatPrice } from '../utils/api';
+import { dateParts, remainingLabel, tone } from '../utils/ui';
 import type { Availability, Event, PageProps } from '../types';
 
 const STEPS = [
     {
-        icon: 'fa-user-plus',
         title: 'Créez votre compte',
         text: 'Une adresse e-mail et un mot de passe suffisent.',
     },
     {
-        icon: 'fa-search',
         title: 'Choisissez un événement',
-        text: 'Parcourez le catalogue : date, lieu, prix et places restantes.',
+        text: 'Date, lieu, prix et places restantes sont affichés pour chacun.',
     },
     {
-        icon: 'fa-ticket-alt',
         title: 'Réservez vos places',
-        text: "Jusqu'à 10 billets par réservation.",
+        text: "Jusqu'à 10 billets par réservation, annulables depuis votre compte.",
     },
 ];
 
 const PERKS = [
     {
-        icon: 'fa-check-circle',
-        title: 'Places garanties',
-        text: 'La capacité est contrôlée à chaque réservation : jamais de sur-vente.',
+        title: 'Jamais de sur-vente',
+        text: 'La capacité est vérifiée à chaque réservation : si vous avez un billet, la place existe.',
     },
     {
-        icon: 'fa-undo',
-        title: 'Annulation en un clic',
-        text: "Un imprévu ? Annulez depuis « Mes billets », la place est libérée.",
+        title: 'Annulation sans démarche',
+        text: 'Annulez depuis « Mes billets » : la place est aussitôt remise en vente.',
     },
     {
-        icon: 'fa-lock',
-        title: 'Compte sécurisé',
-        text: 'Connexion par jeton signé, accès limité à vos propres billets.',
+        title: 'Vos billets restent privés',
+        text: 'Seul votre compte voit et gère vos réservations.',
     },
 ];
-
-// Dégradé stable par événement, pour des cartes qui ne se ressemblent pas.
-const COVERS = [
-    'linear-gradient(135deg, #0e7490, #155e75)',
-    'linear-gradient(135deg, #ea580c, #c2410c)',
-    'linear-gradient(135deg, #7c3aed, #4c1d95)',
-    'linear-gradient(135deg, #0f766e, #134e4a)',
-    'linear-gradient(135deg, #be185d, #831843)',
-];
-
-function cover(id: string): string {
-    const sum = [...id].reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    return COVERS[sum % COVERS.length];
-}
-
-function dateParts(iso: string) {
-    const d = new Date(iso);
-    return {
-        day: d.toLocaleDateString('fr-FR', { day: '2-digit' }),
-        month: d
-            .toLocaleDateString('fr-FR', { month: 'short' })
-            .replace('.', ''),
-    };
-}
 
 // Les événements ne sont lisibles que par un utilisateur connecté (contrat
 // d'API) : un visiteur voit donc une bannière d'accueil, sans événement.
@@ -103,155 +74,126 @@ export default function HomePage({ token, user, navigate }: PageProps) {
     }, [token, user?.id]);
 
     const featured = upcoming[0];
-    const others = upcoming.slice(1, 4);
+    const others = upcoming.slice(1, 5);
     const parts = featured ? dateParts(featured.startsAt) : null;
 
     return (
         <div className="home">
             <section className="hero">
-                <div className="hero-glow" aria-hidden="true" />
-                <div className="hero-grid">
-                    <div className="hero-content">
-                        {featured ? (
-                            <>
-                                <span className="hero-badge">
-                                    <i className="fas fa-star" /> À la une
-                                </span>
-                                <h1 className="hero-title">{featured.title}</h1>
-                                <ul className="hero-meta">
-                                    <li>
-                                        <i className="fas fa-calendar-alt" />
-                                        {formatDate(featured.startsAt)}
-                                    </li>
-                                    <li>
-                                        <i className="fas fa-map-marker-alt" />
-                                        {featured.venue}
-                                    </li>
-                                </ul>
-                                <div className="hero-actions">
+                <div className="hero-copy">
+                    {featured ? (
+                        <>
+                            <span className="sticker">À la une</span>
+                            <h1 className="hero-title">{featured.title}</h1>
+                            <p className="hero-lead">
+                                {formatDate(featured.startsAt)}, {featured.venue}
+                            </p>
+                            <div className="hero-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-sun btn-lg"
+                                    onClick={() =>
+                                        navigate(`/events/${featured.id}`)
+                                    }
+                                >
+                                    Réserver ma place
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost btn-lg"
+                                    onClick={() => navigate('/events')}
+                                >
+                                    Voir tous les événements
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <h1 className="hero-title">
+                                Réservez avant que ce soit complet.
+                            </h1>
+                            <p className="hero-lead">
+                                Concerts, spectacles et conférences : choisissez
+                                un événement, prenez vos places, annulez si
+                                besoin.
+                            </p>
+                            <div className="hero-actions">
+                                {user ? (
                                     <button
                                         type="button"
-                                        className="btn btn-light btn-lg"
-                                        onClick={() =>
-                                            navigate(`/events/${featured.id}`)
-                                        }
-                                    >
-                                        Réserver ma place
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="btn btn-outline-light btn-lg"
+                                        className="btn btn-sun btn-lg"
                                         onClick={() => navigate('/events')}
                                     >
-                                        Tous les événements{' '}
-                                        <i className="fas fa-arrow-right ms-1" />
+                                        Voir les événements
                                     </button>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <span className="hero-badge">
-                                    <i className="fas fa-ticket-alt" />{' '}
-                                    Billetterie en ligne
-                                </span>
-                                <h1 className="hero-title">
-                                    Vos prochaines sorties commencent ici
-                                </h1>
-                                <p className="hero-lead">
-                                    Concerts, spectacles, conférences :
-                                    trouvez votre prochain événement et
-                                    réservez vos places en quelques clics.
-                                </p>
-                                <div className="hero-actions">
-                                    {user ? (
+                                ) : (
+                                    <>
                                         <button
                                             type="button"
-                                            className="btn btn-light btn-lg"
-                                            onClick={() => navigate('/events')}
+                                            className="btn btn-sun btn-lg"
+                                            onClick={() =>
+                                                navigate('/register')
+                                            }
                                         >
-                                            Voir les événements{' '}
-                                            <i className="fas fa-arrow-right ms-1" />
+                                            Créer un compte
                                         </button>
-                                    ) : (
-                                        <>
-                                            <button
-                                                type="button"
-                                                className="btn btn-light btn-lg"
-                                                onClick={() =>
-                                                    navigate('/register')
-                                                }
-                                            >
-                                                Créer un compte
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="btn btn-outline-light btn-lg"
-                                                onClick={() =>
-                                                    navigate('/login')
-                                                }
-                                            >
-                                                Connexion
-                                            </button>
-                                        </>
-                                    )}
-                                </div>
-                            </>
-                        )}
-                    </div>
-
-                    <div className="hero-ticket" aria-hidden={!featured}>
-                        {featured && parts ? (
-                            <>
-                                <div className="ticket-main">
-                                    <p className="ticket-label">Billet</p>
-                                    <p className="ticket-date">
-                                        <span>{parts.day}</span>
-                                        {parts.month}
-                                    </p>
-                                    <p className="ticket-venue">
-                                        {featured.venue}
-                                    </p>
-                                </div>
-                                <div className="ticket-stub">
-                                    <p className="ticket-price">
-                                        {formatPrice(featured.priceCents)}
-                                    </p>
-                                    <p className="ticket-left">
-                                        {availability
-                                            ? availability.remaining > 0
-                                                ? `${availability.remaining} places restantes`
-                                                : 'Complet'
-                                            : ' '}
-                                    </p>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <div className="ticket-main">
-                                    <p className="ticket-label">Admit one</p>
-                                    <i className="fas fa-ticket-alt ticket-big" />
-                                </div>
-                                <div className="ticket-stub">
-                                    <p className="ticket-price">N° 0001</p>
-                                </div>
-                            </>
-                        )}
-                    </div>
+                                        <button
+                                            type="button"
+                                            className="btn btn-ghost btn-lg"
+                                            onClick={() => navigate('/login')}
+                                        >
+                                            Se connecter
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </>
+                    )}
                 </div>
-            </section>
 
-            <section className="perks">
-                {PERKS.map((perk) => (
-                    <div className="perk" key={perk.title}>
-                        <span className="perk-icon">
-                            <i className={`fas ${perk.icon}`} />
-                        </span>
-                        <div>
-                            <p className="perk-title">{perk.title}</p>
-                            <p className="perk-text">{perk.text}</p>
-                        </div>
-                    </div>
-                ))}
+                <div className="ticket ticket-hero" aria-hidden={!featured}>
+                    {featured && parts ? (
+                        <>
+                            <div className="ticket-main">
+                                <p className="ticket-big-date">
+                                    <strong>{parts.day}</strong>
+                                    {parts.month}
+                                </p>
+                                <p className="ticket-meta">
+                                    {parts.time}, {featured.venue}
+                                </p>
+                            </div>
+                            <div className="ticket-stub">
+                                <p className="ticket-price">
+                                    {formatPrice(featured.priceCents)}
+                                </p>
+                                <p className="ticket-left">
+                                    {availability
+                                        ? remainingLabel(availability.remaining)
+                                        : ''}
+                                </p>
+                                <span className="barcode" />
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="ticket-main">
+                                <p className="ticket-big-word">
+                                    The
+                                    <br />
+                                    Weeknd
+                                </p>
+                                <p className="ticket-meta">
+                                    Votre place vous attend
+                                </p>
+                            </div>
+                            <div className="ticket-stub">
+                                <p className="ticket-price">N° 0001</p>
+                                <span className="barcode" />
+                            </div>
+                        </>
+                    )}
+                </div>
             </section>
 
             {others.length > 0 && (
@@ -263,44 +205,39 @@ export default function HomePage({ token, user, navigate }: PageProps) {
                             className="btn btn-link p-0"
                             onClick={() => navigate('/events')}
                         >
-                            Tout voir <i className="fas fa-arrow-right ms-1" />
+                            Tout le catalogue
                         </button>
                     </div>
-                    <div className="row g-3">
+                    <div className="ticket-grid">
                         {others.map((event) => {
                             const p = dateParts(event.startsAt);
                             return (
-                                <div className="col-12 col-md-4" key={event.id}>
-                                    <button
-                                        type="button"
-                                        className="home-event"
-                                        onClick={() =>
-                                            navigate(`/events/${event.id}`)
-                                        }
-                                    >
-                                        <div
-                                            className="home-event-cover"
-                                            style={{
-                                                background: cover(event.id),
-                                            }}
-                                        >
-                                            <span className="home-event-date">
-                                                <strong>{p.day}</strong>
-                                                {p.month}
-                                            </span>
-                                            <span className="home-event-price">
+                                <button
+                                    type="button"
+                                    key={event.id}
+                                    className={`ticket ticket-card tone-${tone(event.id)}`}
+                                    onClick={() =>
+                                        navigate(`/events/${event.id}`)
+                                    }
+                                >
+                                    <span className="ticket-date">
+                                        <strong>{p.day}</strong>
+                                        {p.month}
+                                    </span>
+                                    <span className="ticket-body">
+                                        <span className="ticket-title">
+                                            {event.title}
+                                        </span>
+                                        <span className="ticket-line">
+                                            {p.time}, {event.venue}
+                                        </span>
+                                        <span className="ticket-foot">
+                                            <span className="price">
                                                 {formatPrice(event.priceCents)}
                                             </span>
-                                        </div>
-                                        <div className="home-event-body">
-                                            <h3>{event.title}</h3>
-                                            <p>
-                                                <i className="fas fa-map-marker-alt" />
-                                                {event.venue}
-                                            </p>
-                                        </div>
-                                    </button>
-                                </div>
+                                        </span>
+                                    </span>
+                                </button>
                             );
                         })}
                     </div>
@@ -311,32 +248,39 @@ export default function HomePage({ token, user, navigate }: PageProps) {
                 <div className="section-head">
                     <h2>Comment ça marche</h2>
                 </div>
-                <div className="steps">
+                <ol className="steps">
                     {STEPS.map((step, i) => (
-                        <div className="step" key={step.title}>
+                        <li className="step" key={step.title}>
                             <span className="step-num">{i + 1}</span>
-                            <span className="step-icon">
-                                <i className={`fas ${step.icon}`} />
-                            </span>
                             <h3>{step.title}</h3>
                             <p>{step.text}</p>
+                        </li>
+                    ))}
+                </ol>
+            </section>
+
+            <section className="home-section">
+                <div className="section-head">
+                    <h2>Ce que vous gagnez</h2>
+                </div>
+                <div className="perks">
+                    {PERKS.map((perk) => (
+                        <div className="perk" key={perk.title}>
+                            <h3>{perk.title}</h3>
+                            <p>{perk.text}</p>
                         </div>
                     ))}
                 </div>
             </section>
 
             <section className="home-cta">
-                <div>
-                    <h2>Prêt à réserver ?</h2>
-                    <p>Parcourez tous les événements et trouvez le vôtre.</p>
-                </div>
+                <h2>Trouvez votre prochaine soirée.</h2>
                 <button
                     type="button"
-                    className="btn btn-light btn-lg"
+                    className="btn btn-dark btn-lg"
                     onClick={() => navigate('/events')}
                 >
-                    Voir les événements{' '}
-                    <i className="fas fa-arrow-right ms-1" />
+                    Voir les événements
                 </button>
             </section>
         </div>

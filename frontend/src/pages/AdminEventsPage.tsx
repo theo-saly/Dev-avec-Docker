@@ -97,10 +97,10 @@ export default function AdminEventsPage({ token, pushMessage }: PageProps) {
     };
 
     return (
-        <section>
-            <h1 className="h3 mb-4">Gestion des événements</h1>
+        <section className="page">
+            <h1 className="page-title">Gérer les événements</h1>
 
-            <form className="card card-body mb-4" onSubmit={submit}>
+            <form className="panel mb-4" onSubmit={submit}>
                 <h2 className="h5">
                     {editingId ? "Modifier l'événement" : 'Nouvel événement'}
                 </h2>
@@ -191,6 +191,7 @@ export default function AdminEventsPage({ token, pushMessage }: PageProps) {
                 </div>
             </form>
 
+            <div className="table-wrap">
             <table className="table">
                 <thead>
                     <tr>
@@ -209,8 +210,8 @@ export default function AdminEventsPage({ token, pushMessage }: PageProps) {
                             <td>{formatDate(event.startsAt)}</td>
                             <td>{event.venue}</td>
                             <td>{event.capacity}</td>
-                            <td>{formatPrice(event.priceCents)}</td>
-                            <td className="text-end">
+                            <td className="text-nowrap">{formatPrice(event.priceCents)}</td>
+                            <td className="text-end text-nowrap">
                                 <button
                                     type="button"
                                     className="btn btn-outline-secondary btn-sm me-2"
@@ -230,6 +231,7 @@ export default function AdminEventsPage({ token, pushMessage }: PageProps) {
                     ))}
                 </tbody>
             </table>
+            </div>
         </section>
     );
 }

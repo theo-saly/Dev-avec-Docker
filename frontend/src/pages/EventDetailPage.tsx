@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, formatDate, formatPrice } from '../utils/api';
+import { tone } from '../utils/ui';
 import type { Availability, Event, PageProps } from '../types';
 
 export default function EventDetailPage({
@@ -59,36 +60,72 @@ export default function EventDetailPage({
         }
     };
 
-    if (notFound) return <p className="text-muted">Événement introuvable.</p>;
-    if (!event) return <p className="text-muted">Chargement…</p>;
+    if (notFound) return <p className="empty">Événement introuvable.</p>;
+    if (!event) return <p className="empty">Chargement…</p>;
 
     const remaining = availability?.remaining ?? 0;
     const maxQuantity = Math.min(10, Math.max(remaining, 1));
+    const filled = availability
+        ? Math.round((availability.booked / Math.max(availability.capacity, 1)) * 100)
+        : 0;
 
     return (
-        <section>
+        <section className="page">
             <button
                 type="button"
                 className="btn btn-link px-0 mb-3"
                 onClick={() => navigate('/events')}
             >
-                ← Retour au catalogue
+                <i className="fas fa-arrow-left me-2" />
+                Retour au catalogue
             </button>
-            <div className="card">
-                <div className="card-body">
-                    <h1 className="h3">{event.title}</h1>
-                    <p className="text-muted mb-1">
-                        {formatDate(event.startsAt)} — {event.venue}
+
+            <div className={`detail-hero tone-${tone(event.id)}`}>
+                <p className="detail-when">{formatDate(event.startsAt)}</p>
+                <h1 className="detail-title">{event.title}</h1>
+                <p className="detail-where">
+                    <i className="fas fa-map-marker-alt" />
+                    {event.venue}
+                </p>
+            </div>
+
+            <div className="detail-grid">
+                <div>
+                    <h2 className="h4">À propos</h2>
+                    <p className="detail-desc">{event.description}</p>
+                </div>
+
+                <aside className="booking">
+                    <p className="booking-price">
+                        {formatPrice(event.priceCents)}
+                        <span> la place</span>
                     </p>
-                    <p className="mb-3">{event.description}</p>
-                    <p className="fw-bold">{formatPrice(event.priceCents)}</p>
-                    <p>
-                        {availability
-                            ? `${availability.remaining} places restantes sur ${availability.capacity}`
-                            : 'Disponibilité indisponible'}
-                    </p>
-                    <div className="d-flex gap-2 align-items-center">
+                    {availability ? (
+                        <>
+                            <div
+                                className="meter"
+                                role="img"
+                                aria-label={`${availability.booked} places réservées sur ${availability.capacity}`}
+                            >
+                                <span style={{ width: `${filled}%` }} />
+                            </div>
+                            <p className="booking-left">
+                                {remaining === 0
+                                    ? 'Complet'
+                                    : `${remaining} places restantes sur ${availability.capacity}`}
+                            </p>
+                        </>
+                    ) : (
+                        <p className="booking-left">
+                            Disponibilité indisponible
+                        </p>
+                    )}
+                    <label className="form-label" htmlFor="quantity">
+                        Nombre de places
+                    </label>
+                    <div className="d-flex gap-2">
                         <select
+                            id="quantity"
                             className="form-select w-auto"
                             value={quantity}
                             onChange={(e) => setQuantity(Number(e.target.value))}
@@ -102,14 +139,14 @@ export default function EventDetailPage({
                         </select>
                         <button
                             type="button"
-                            className="btn btn-primary"
+                            className="btn btn-primary flex-grow-1"
                             onClick={book}
                             disabled={busy || remaining === 0}
                         >
                             {remaining === 0 ? 'Complet' : 'Réserver'}
                         </button>
                     </div>
-                </div>
+                </aside>
             </div>
         </section>
     );

@@ -11,7 +11,7 @@ export default function Navbar({ user, navigate, onLogout }: NavbarProps) {
     const link = (path: string, label: string) => (
         <button
             type="button"
-            className="btn btn-outline-secondary"
+            className="nav-link-btn"
             onClick={() => navigate(path)}
         >
             {label}
@@ -19,33 +19,44 @@ export default function Navbar({ user, navigate, onLogout }: NavbarProps) {
     );
 
     return (
-        <header className="topbar container-fluid py-3 px-3 px-md-4">
-            <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+        <header className="topbar">
+            <div className="container topbar-inner">
                 <button
                     type="button"
-                    className="brand-mark btn btn-link p-0 text-start text-decoration-none"
+                    className="brand"
                     onClick={() => navigate('/')}
                 >
+                    <span className="brand-glyph">
+                        <i className="fas fa-ticket-alt" />
+                    </span>
                     Billetterie
                 </button>
-                <div className="d-flex gap-2 flex-wrap">
-                    {!user && link('/login', 'Connexion')}
-                    {!user && link('/register', 'Inscription')}
+                <nav className="topbar-nav" aria-label="Navigation principale">
                     {user && link('/events', 'Événements')}
                     {user && link('/my-tickets', 'Mes billets')}
                     {user && link('/account', 'Mon compte')}
-                    {user?.role === 'admin' && link('/admin/events', 'Admin événements')}
-                    {user?.role === 'admin' && link('/admin/users', 'Admin utilisateurs')}
+                    {user?.role === 'admin' && link('/admin/events', 'Gérer les événements')}
+                    {user?.role === 'admin' && link('/admin/users', 'Gérer les comptes')}
+                    {!user && link('/login', 'Connexion')}
+                    {!user && (
+                        <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => navigate('/register')}
+                        >
+                            Créer un compte
+                        </button>
+                    )}
                     {user && (
                         <button
                             type="button"
-                            className="btn btn-dark"
+                            className="btn btn-dark btn-sm"
                             onClick={onLogout}
                         >
                             Déconnexion
                         </button>
                     )}
-                </div>
+                </nav>
             </div>
         </header>
     );

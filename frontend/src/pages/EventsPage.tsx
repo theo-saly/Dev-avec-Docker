@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { api, formatDate, formatPrice } from '../utils/api';
+import { api, formatPrice } from '../utils/api';
+import { dateParts, remainingLabel, tone } from '../utils/ui';
 import type { Availability, Event, PageProps } from '../types';
 
 export default function EventsPage({ token, navigate, pushMessage }: PageProps) {
@@ -39,50 +40,59 @@ export default function EventsPage({ token, navigate, pushMessage }: PageProps) 
         load();
     }, [token]);
 
-    if (loading) return <p className="text-muted">Chargement…</p>;
+    if (loading) return <p className="empty">Chargement…</p>;
 
     return (
-        <section>
-            <h1 className="h3 mb-4">Événements</h1>
-            {events.length === 0 && (
-                <p className="text-muted">Aucun événement pour le moment.</p>
-            )}
-            <div className="row g-3">
+        <section className="page">
+            <header className="page-head">
+                <h1 className="page-title">Événements</h1>
+                <p className="page-sub">
+                    {events.length === 0
+                        ? 'Rien au programme pour le moment.'
+                        : `${events.length} événement${events.length > 1 ? 's' : ''} au programme`}
+                </p>
+            </header>
+            <div className="ticket-grid">
                 {events.map((event) => {
                     const a = availability[event.id];
+                    const p = dateParts(event.startsAt);
                     return (
-                        <div className="col-12 col-md-6 col-lg-4" key={event.id}>
-                            <div className="card h-100 event-card">
-                                <div className="card-body d-flex flex-column">
-                                    <h2 className="h5">{event.title}</h2>
-                                    <p className="text-muted mb-1">
-                                        {formatDate(event.startsAt)}
-                                    </p>
-                                    <p className="text-muted mb-1">
-                                        {event.venue}
-                                    </p>
-                                    <p className="fw-bold mb-1">
+                        <article
+                            className={`ticket ticket-card tone-${tone(event.id)}`}
+                            key={event.id}
+                        >
+                            <div className="ticket-date">
+                                <strong>{p.day}</strong>
+                                {p.month}
+                            </div>
+                            <div className="ticket-body">
+                                <h2 className="ticket-title">{event.title}</h2>
+                                <p className="ticket-line">
+                                    {p.time}, {event.venue}
+                                </p>
+                                <div className="ticket-foot">
+                                    <span className="price">
                                         {formatPrice(event.priceCents)}
-                                    </p>
-                                    <p className="mb-3">
-                                        {a
-                                            ? a.remaining > 0
-                                                ? `${a.remaining} places restantes`
-                                                : 'Complet'
-                                            : '—'}
-                                    </p>
+                                    </span>
+                                    <span
+                                        className={`chip ${a && a.remaining <= 5 ? 'chip-warn' : ''}`}
+                                    >
+                                        {remainingLabel(a?.remaining)}
+                                    </span>
                                     <button
                                         type="button"
-                                        className="btn btn-primary mt-auto"
+                                        className="btn btn-primary btn-sm ms-auto"
                                         onClick={() =>
                                             navigate(`/events/${event.id}`)
                                         }
                                     >
-                                        Voir / Réserver
+                                        {a && a.remaining === 0
+                                            ? 'Voir'
+                                            : 'Réserver'}
                                     </button>
                                 </div>
                             </div>
-                        </div>
+                        </article>
                     );
                 })}
             </div>
