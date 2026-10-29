@@ -81,7 +81,7 @@ Toutes les routes sont préfixées par `/api` côté navigateur. Erreurs au form
 | --- | --- | --- | --- | --- |
 | `env/test.env` | construites en local | 8080 | 0,5 CPU / 256 Mo | 1 Go |
 | `env/uat.env` | CI, tag `sha-<commit>` | 8081 | 0,5 CPU / 256 Mo | 1 Go |
-| `env/prod.env` | CI, tag `v1.0.0` | 80 | 1 CPU / 512 Mo | 2 Go |
+| `env/prod.env` | CI, tag `v1.2.1` | 80 | 1 CPU / 512 Mo | 2 Go |
 
 En UAT et PROD, les images sont récupérées sur GHCR au lieu d'être construites :
 
