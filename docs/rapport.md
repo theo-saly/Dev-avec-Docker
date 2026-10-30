@@ -58,6 +58,30 @@ Les règles de gestion sont les suivantes :
 
 Chaque backend a ses tests unitaires : 36 pour auth-service (PHPUnit), 17 pour event-service, 19 pour ticket-service et 4 pour notification-service (Jest).
 
+### Parcours d'un utilisateur
+
+Une fois connecté, l'utilisateur arrive sur le catalogue. Chaque carte affiche le prix de l'événement et le nombre de places restantes, ou « Complet » quand il n'y en a plus.
+
+![Catalogue des événements](images/catalogue.png)
+
+*Figure 2 : le catalogue des événements, vu par un utilisateur connecté*
+
+Sur la fiche d'un événement, il choisit le nombre de places (jusqu'à 10 par réservation) puis réserve. Quand l'événement est complet, le bouton est désactivé. Même si quelqu'un contournait l'interface, ticket-service refuserait la réservation.
+
+![Fiche d'un événement avec des places disponibles](images/evenement-disponible.png)
+
+*Figure 3 : la fiche d'un événement avec des places disponibles*
+
+![Fiche d'un événement complet](images/evenement-complet.png)
+
+*Figure 4 : un événement complet, la réservation n'est plus possible*
+
+Ses réservations apparaissent ensuite dans « Mes billets », d'où il peut les annuler. Un billet annulé reste visible mais grisé, et ses places sont remises en vente.
+
+![Page Mes billets](images/mes-billets.png)
+
+*Figure 5 : la page « Mes billets » juste après une réservation, avec un billet annulé*
+
 ## 2. Dockerfiles et docker-compose
 
 ### Les Dockerfiles
@@ -111,7 +135,7 @@ Si une étape échoue, la suite ne se lance pas : la construction des images att
 
 ![Historique des exécutions sur GitHub Actions](images/ci-github-actions.png)
 
-*Figure 2 : l'historique des exécutions sur GitHub Actions. Chaque push lance les trois workflows (CI, CodeQL et Security), sur toutes les branches comme sur le tag `v1.2.1`.*
+*Figure 6 : l'historique des exécutions sur GitHub Actions. Chaque push lance les trois workflows (CI, CodeQL et Security), sur toutes les branches comme sur le tag `v1.2.1`.*
 
 
 La mise en place n'a demandé aucun secret à configurer : la CI se connecte au registre GitHub avec le jeton fourni automatiquement à chaque exécution (`GITHUB_TOKEN`), auquel on donne seulement le droit de publier des paquets. Les six images sont construites en parallèle grâce à une matrice (un job par service), et leurs tags sont calculés par l'action `docker/metadata-action`. Les images sont publiques, donc les environnements UAT et PROD les récupèrent avec un simple `docker compose pull`.
